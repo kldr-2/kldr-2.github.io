@@ -921,10 +921,14 @@
         function setLanguage(lang) {
             currentLang = lang;
             
-            // Only hide lang select if game hasn't started
-            if (!gameStarted && document.getElementById('language-overlay').style.display !== 'none') {
-                document.getElementById('language-overlay').style.display = 'none';
-                document.getElementById('intro-overlay').style.display = 'flex';
+            // FIX: Handle overlay transition regardless of gameStarted state
+            const langOverlay = document.getElementById('language-overlay');
+            if (langOverlay.style.display !== 'none') {
+                langOverlay.style.display = 'none';
+                // Only show intro if it's a NEW game
+                if (!gameStarted) {
+                    document.getElementById('intro-overlay').style.display = 'flex';
+                }
             }
 
             // Safe DOM updates
