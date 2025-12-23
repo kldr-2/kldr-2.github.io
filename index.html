@@ -2,24 +2,26 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Hani's World Tour Matcha Café</title>
     <!-- Pixel Font -->
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
         :root {
-            /* DYNAMIC PALETTE (Default: Hungary) */
-            --bg-color: #CD2A3E;      /* Hungary Red */
-            --bg-pattern: #436F4D;    /* Hungary Green */
-            --panel-bg: #ffffff;      /* White */
-            --primary: #436F4D;       /* Green */
-            --accent: #CD2A3E;        /* Red */
-            --text-color: #212121;    /* Default Text */
+            /* DYNAMIC PALETTE (Default: Hungary/Christmas) */
+            --bg-color: #8f1e1e;      /* Christmas Red */
+            --bg-pattern: #165b33;    /* Christmas Green */
+            --panel-bg: #f0f0f0;      /* Snow White */
+            --primary: #165b33;       /* Pine Green */
+            --accent: #d4af37;        /* Gold */
+            --text-color: #212121;
             --border-color: #000000;
             --news-bg: #212121;       
             
             --border-width: 4px;
         }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body {
             margin: 0;
@@ -33,6 +35,7 @@
             color: var(--text-color);
             font-family: 'VT323', monospace;
             height: 100vh;
+            width: 100vw;
             overflow: hidden;
             user-select: none;
             display: flex;
@@ -41,7 +44,7 @@
         }
 
         /* --- OVERLAYS --- */
-        #intro-overlay, #location-popup, #stats-overlay, #menu-overlay, #map-overlay, #newspaper-overlay {
+        #language-overlay, #intro-overlay, #tutorial-overlay, #location-popup, #stats-overlay, #menu-overlay, #map-overlay, #newspaper-overlay, #reset-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.9);
@@ -49,33 +52,34 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 20px;
         }
         
-        #location-popup, #stats-overlay, #menu-overlay, #map-overlay, #newspaper-overlay { display: none; }
+        #intro-overlay, #tutorial-overlay, #location-popup, #stats-overlay, #menu-overlay, #map-overlay, #newspaper-overlay, #reset-overlay { display: none; }
 
         .modal-box {
             background: var(--panel-bg);
             border: 6px solid var(--primary);
-            padding: 40px;
+            padding: 20px;
             max-width: 600px;
-            width: 90%;
+            width: 100%;
             text-align: center;
             box-shadow: 0 0 0 1000px rgba(0,0,0,0.5);
             position: relative;
-            max-height: 80vh;
+            max-height: 90vh;
             overflow-y: auto;
             color: #212121;
         }
 
         .modal-box h1, .modal-box h2 {
             color: var(--accent);
-            font-size: 3.5rem;
-            margin: 0 0 20px 0;
+            font-size: 2.5rem;
+            margin: 0 0 15px 0;
             text-transform: uppercase;
-            text-shadow: 2px 2px 0px #fff;
+            text-shadow: 2px 2px 0px #000;
         }
 
-        .modal-box p { font-size: 1.5rem; line-height: 1.4; margin-bottom: 30px; }
+        .modal-box p { font-size: 1.3rem; line-height: 1.4; margin-bottom: 20px; }
 
         /* Generic Button Style */
         .pixel-btn {
@@ -83,20 +87,20 @@
             color: white;
             border: 4px solid black;
             font-family: 'VT323', monospace;
-            font-size: 2rem;
-            padding: 10px 30px;
+            font-size: 1.5rem;
+            padding: 10px 20px;
             cursor: pointer;
             box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
             transition: transform 0.1s;
             text-shadow: 1px 1px 0 #000;
-            margin: 10px;
+            margin: 5px;
+            display: inline-block;
         }
-        .pixel-btn:hover { transform: scale(1.05); }
         .pixel-btn:active { transform: scale(0.95); box-shadow: 2px 2px 0px rgba(0,0,0,0.5); }
 
         .pixel-btn.small {
-            font-size: 1.2rem;
-            padding: 5px 15px;
+            font-size: 1rem;
+            padding: 5px 10px;
             box-shadow: 3px 3px 0px rgba(0,0,0,0.5);
         }
 
@@ -105,512 +109,314 @@
             background: #fdf6e3;
             border: 4px solid #212121;
             padding: 20px;
+            width: 100%;
             max-width: 500px;
             color: #212121;
             text-align: center;
             box-shadow: 10px 10px 0px rgba(0,0,0,0.5);
             position: relative;
         }
-        .news-header {
-            border-bottom: 4px double #212121;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
+        .news-header { border-bottom: 4px double #212121; margin-bottom: 15px; padding-bottom: 10px; }
+        .news-logo { font-size: 3rem; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
+        .news-sub { font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; }
+        .news-headline { font-size: 2rem; margin: 15px 0; font-weight: bold; line-height: 1; }
+        .news-body { font-size: 1.3rem; margin-bottom: 20px; }
+        .news-close { position: absolute; top: -10px; right: -10px; background: red; color: white; border: 2px solid black; width: 30px; height: 30px; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        /* --- SNOW EFFECT --- */
+        .snowflake {
+            position: fixed; top: -10px; z-index: 9999; user-select: none; pointer-events: none; color: white;
+            animation: fall linear forwards;
         }
-        .news-logo {
-            font-size: 4rem;
-            font-weight: bold;
-            letter-spacing: 5px;
-            text-transform: uppercase;
-        }
-        .news-sub { font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; }
-        .news-headline { font-size: 2.5rem; margin: 20px 0; font-weight: bold; line-height: 1; }
-        .news-body { font-size: 1.5rem; margin-bottom: 20px; }
-        .news-close {
-            position: absolute; top: -15px; right: -15px;
-            background: red; color: white; border: 2px solid black;
-            width: 40px; height: 40px; font-size: 2rem; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-        }
+        @keyframes fall { to { transform: translateY(105vh); } }
 
         /* --- LAYOUT --- */
-        #game-container {
-            display: flex;
+        #game-container { 
+            display: flex; 
             flex: 1; 
-            padding: 20px;
-            box-sizing: border-box;
-            gap: 20px;
-            overflow: hidden;
-            height: 100%;
+            padding: 10px; 
+            box-sizing: border-box; 
+            gap: 10px; 
+            overflow: hidden; 
+            height: calc(100vh - 40px); /* Minus news bar */
         }
 
         /* LEFT PANEL */
         .left-panel {
-            flex: 1;
-            background: var(--panel-bg);
+            flex: 1; 
+            background: var(--panel-bg); 
             border: var(--border-width) solid var(--border-color);
-            box-shadow: 10px 10px 0px rgba(0,0,0,0.5);
-            display: flex;
+            box-shadow: 6px 6px 0px rgba(0,0,0,0.5); 
+            display: flex; 
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            color: #212121;
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 10px; 
+            color: #212121; 
             position: relative;
+            min-width: 250px;
         }
 
-        #menu-btn { position: absolute; top: 10px; left: 10px; z-index: 100; }
+        #menu-btn { position: absolute; top: 5px; left: 5px; z-index: 100; }
 
-        .resource-display {
-            text-align: center;
-            margin-bottom: 30px;
-            background: #fff;
-            padding: 10px 30px;
-            border: 3px solid black;
-            box-shadow: 5px 5px 0px #888;
-            width: 80%;
+        .resource-display { 
+            text-align: center; 
+            margin-top: 30px;
+            background: #fff; 
+            padding: 5px 15px; 
+            border: 3px solid black; 
+            box-shadow: 4px 4px 0px #888; 
+            width: 90%; 
         }
+        #resource-count { font-size: 3.5rem; font-weight: bold; color: var(--primary); line-height: 1; text-shadow: 2px 2px 0px rgba(0,0,0,0.1); word-break: break-all; }
+        #rps-display { font-size: 1.4rem; color: var(--accent); text-transform: uppercase; }
+        #active-rps { font-size: 1rem; color: #555; min-height: 1.2em; }
 
-        #resource-count {
-            font-size: 4.5rem;
-            font-weight: bold;
-            color: var(--primary);
-            line-height: 1;
-            text-shadow: 2px 2px 0px #000;
-        }
-
-        #rps-display { font-size: 1.8rem; color: var(--accent); text-transform: uppercase; }
-        #active-rps { font-size: 1.2rem; color: #555; min-height: 1.5em; }
-
-        #click-btn-container {
-            position: relative;
-            width: 300px; height: 300px;
-            display: flex; align-items: center; justify-content: center;
-        }
-
+        #click-btn-container { position: relative; width: 220px; height: 220px; display: flex; align-items: center; justify-content: center; }
         #click-btn {
-            width: 200px; height: 200px;
-            background-color: var(--primary);
-            border: 6px solid var(--border-color);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 6rem;
-            cursor: pointer;
-            box-shadow: 0px 8px 0px rgba(0,0,0,0.3);
-            position: relative;
-            z-index: 10;
-            transition: transform 0.05s;
+            width: 180px; height: 180px; background-color: var(--primary); border: 6px solid var(--border-color); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 5rem; cursor: pointer;
+            box-shadow: 0px 8px 0px rgba(0,0,0,0.3); position: relative; z-index: 10; transition: transform 0.05s;
         }
         #click-btn:active, #click-btn.bump { transform: scale(0.95); box-shadow: none; }
         #click-btn::after { content: "🍵"; filter: drop-shadow(4px 4px 0px rgba(0,0,0,0.5)); }
 
-        /* Floating Orbit Wrappers */
-        .orbit-wrapper {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: 20;
-            pointer-events: none;
-            display: none; 
-        }
-        
-        /* Dylan & Heart are handled via JS for position, no CSS rotate */
-        .orbiter-sprite {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 4rem;
-            transition: margin-top 0.1s;
-        }
-        
-        /* Adjusted Margins for Closer Float */
-        #dylan-sprite { margin-top: -90px; } /* Closer */
-        #heart-sprite { margin-top: -120px; font-size: 3rem; }
-
-        /* Lunge Animation Classes */
-        #dylan-sprite.hitting { margin-top: -50px; } 
-        #heart-sprite.hitting { margin-top: -50px; }
+        /* ORBITS */
+        .orbit-wrapper { position: absolute; width: 100%; height: 100%; z-index: 20; pointer-events: none; display: none; }
+        .orbiter-sprite { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3.5rem; transition: margin-top 0.1s; }
+        #dylan-sprite { margin-top: -80px; } 
+        #heart-sprite { margin-top: -110px; font-size: 2.5rem; }
+        #dylan-sprite.hitting { margin-top: -40px; } 
+        #heart-sprite.hitting { margin-top: -40px; }
 
         /* PROGRESS BAR */
-        .progress-container {
-            width: 100%;
-            height: 24px;
-            background-color: #ddd;
-            border: 3px solid black;
-            margin-top: 10px;
-            position: relative;
-        }
-        .progress-fill {
-            height: 100%;
-            background-color: var(--primary);
-            width: 0%;
-            transition: width 0.5s;
-        }
+        .progress-container { width: 100%; height: 20px; background-color: #ddd; border: 3px solid black; margin-top: 5px; position: relative; }
+        .progress-fill { height: 100%; background-color: var(--primary); width: 0%; transition: width 0.5s; }
 
         /* RIGHT PANEL */
         .right-panel {
-            flex: 1.5;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
+            flex: 1.5; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100%; 
             overflow: hidden;
-            background: transparent;
-            gap: 0;
-            box-shadow: 10px 10px 0px rgba(0,0,0,0.5);
-            border: var(--border-width) solid var(--border-color);
-            background: var(--panel-bg);
+            background: transparent; 
+            gap: 0; 
+            box-shadow: 6px 6px 0px rgba(0,0,0,0.5);
+            border: var(--border-width) solid var(--border-color); 
+            background: var(--panel-bg); 
             color: #212121;
         }
 
-        /* 1. TOP: CAFE SCENE */
-        #cafe-scene {
-            height: 200px;
-            flex-shrink: 0;
-            background-color: #aed581;
-            border-bottom: var(--border-width) solid var(--border-color);
-            position: relative;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        
-        .scene-label {
-            position: absolute; top: 5px; left: 10px;
-            background: black; color: white;
-            padding: 2px 8px; font-size: 1.2rem;
-            z-index: 5; cursor: pointer;
-            transition: 0.1s;
-            border: 2px solid white;
-        }
-        .scene-label:hover { background: var(--accent); transform: scale(1.05); }
+        /* CAFE SCENE */
+        #cafe-scene { height: 150px; flex-shrink: 0; background-color: #aed581; border-bottom: var(--border-width) solid var(--border-color); position: relative; padding: 10px; display: flex; flex-direction: column; overflow: hidden; }
+        .scene-label { position: absolute; top: 5px; left: 10px; background: black; color: white; padding: 2px 8px; font-size: 1rem; z-index: 5; cursor: pointer; transition: 0.1s; border: 2px solid white; }
+        #sprite-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .bouncing-sprite { position: absolute; font-size: 2rem; will-change: transform; line-height: 1; user-select: none; }
 
-        #sprite-container {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
-        }
+        /* INFO PANEL */
+        #info-panel { height: 80px; flex-shrink: 0; background: #fff; border-bottom: var(--border-width) solid var(--border-color); padding: 5px 10px; display: flex; align-items: center; gap: 10px; }
+        #info-icon-container { width: 50px; height: 50px; background: #eee; border: 3px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; flex-shrink: 0; }
+        #info-text { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+        #info-title { margin: 0; font-size: 1.2rem; color: var(--accent); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #info-desc { margin: 0; font-size: 1rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #info-cost { font-weight: bold; color: var(--primary); font-size: 1rem; }
 
-        /* Bouncing Sprites in Cafe */
-        .bouncing-sprite {
-            position: absolute;
-            font-size: 2.5rem;
-            will-change: transform;
-            line-height: 1;
-            user-select: none;
-        }
-
-        /* 2. MIDDLE: INFO PANEL */
-        #info-panel {
-            height: 100px;
-            flex-shrink: 0;
-            background: #fff;
-            border-bottom: var(--border-width) solid var(--border-color);
-            padding: 10px 20px;
-            display: flex;
-            align-items: center; 
-            gap: 20px;
-        }
-        #info-icon-container {
-            width: 70px; height: 70px;
-            background: #eee;
-            border: 3px solid #ccc;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 3rem;
-        }
-        #info-text { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-        #info-title { margin: 0; font-size: 1.5rem; color: var(--accent); text-transform: uppercase; }
-        #info-desc { margin: 0; font-size: 1.2rem; color: #333; }
-        #info-cost { font-weight: bold; color: var(--primary); }
-
-        /* 3. TABS HEADER */
-        .tabs-header {
-            display: flex;
-            height: 50px;
-            flex-shrink: 0;
-            background: #ddd;
-            border-bottom: var(--border-width) solid var(--border-color);
-        }
-        .tab-btn {
-            flex: 1;
-            border: none;
-            background: #ccc;
-            font-family: inherit;
-            font-size: 1.5rem;
-            cursor: pointer;
-            border-right: 2px solid var(--border-color);
-        }
+        /* TABS */
+        .tabs-header { display: flex; height: 40px; flex-shrink: 0; background: #ddd; border-bottom: var(--border-width) solid var(--border-color); }
+        .tab-btn { flex: 1; border: none; background: #ccc; font-family: inherit; font-size: 1.2rem; cursor: pointer; border-right: 2px solid var(--border-color); }
         .tab-btn:last-child { border-right: none; }
-        .tab-btn.active {
-            background: var(--panel-bg);
-            font-weight: bold;
-            color: var(--accent);
-            border-bottom: none;
-        }
-        .tab-btn:hover:not(.active) { background: #bbb; }
+        .tab-btn.active { background: var(--panel-bg); font-weight: bold; color: var(--accent); border-bottom: none; }
 
-        /* 4. BOTTOM: SCROLLABLE CONTENT */
-        .tab-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            display: none;
-        }
+        /* SCROLL CONTENT */
+        .tab-content { flex: 1; overflow-y: auto; padding: 10px; display: none; }
         .tab-content.active { display: block; }
 
-        /* ITEMS STYLING */
-        .shop-item {
-            background: white;
-            border: 3px solid black;
-            margin-bottom: 10px;
-            padding: 8px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-        }
-        .shop-item:hover { background: #eee; transform: scale(1.01); }
-        .shop-item.disabled { background: #e0e0e0; opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
-        
-        .item-icon { font-size: 2rem; width: 50px; text-align: center; }
-        .item-details { flex: 1; }
-        .item-details h3 { margin: 0; font-size: 1.3rem; }
+        /* SHOP ITEMS */
+        .shop-item { background: white; border: 3px solid black; margin-bottom: 8px; padding: 5px; display: flex; align-items: center; cursor: pointer; }
+        .shop-item.disabled { background: #e0e0e0; opacity: 0.6; filter: grayscale(1); }
+        .item-icon { font-size: 1.8rem; width: 40px; text-align: center; }
+        .item-details { flex: 1; padding: 0 10px; }
+        .item-details h3 { margin: 0; font-size: 1.2rem; }
         .item-right { text-align: right; }
-        .item-cost { font-weight: bold; color: var(--accent); }
-        .item-count { background: black; color: white; padding: 0 5px; border-radius: 4px; }
+        .item-cost { font-weight: bold; color: var(--accent); font-size: 1rem; }
+        .item-count { background: black; color: white; padding: 0 5px; border-radius: 4px; font-size: 0.9rem; }
 
-        /* UPGRADES GRID STYLE */
-        .upgrades-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-            gap: 10px;
-        }
-        .upgrade-card {
-            height: 60px;
-            background: var(--accent);
-            border: 3px solid black;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 2rem; color: white;
-            cursor: pointer;
-        }
-        .upgrade-card:hover { transform: translateY(-3px); }
-        .upgrade-card.disabled { background: #777; cursor: not-allowed; }
-
-        /* PASSIVES LIST STYLE */
-        .passive-row {
-            border-bottom: 1px dashed #ccc;
-            padding: 5px 0;
-            display: flex; align-items: center;
-            font-size: 1.1rem;
-        }
+        /* UPGRADES */
+        .upgrades-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 8px; }
+        .upgrade-card { height: 50px; background: var(--accent); border: 3px solid black; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; color: white; cursor: pointer; }
+        .passive-row { border-bottom: 1px dashed #ccc; padding: 5px 0; display: flex; align-items: center; font-size: 1rem; }
 
         /* STATS TABLE */
-        .stats-table { width: 100%; text-align: left; margin-bottom: 20px; font-size: 1.2rem; border-collapse: collapse; }
+        .stats-table { width: 100%; text-align: left; margin-bottom: 20px; font-size: 1rem; border-collapse: collapse; }
         .stats-table td, .stats-table th { border-bottom: 1px solid #ccc; padding: 5px; }
 
-        /* MAP VISUALS (Pixel Art Style CSS) */
-        .pixel-map {
-            width: 700px;
-            height: 350px;
-            background-color: #2196f3;
-            position: relative;
-            border: 4px solid black;
-            margin: 0 auto;
-            overflow: hidden;
-            /* Grid Effect */
-            background-image: 
-                linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
-            background-size: 20px 20px;
-        }
-        
-        /* Pixelated Continents (Rectilinear Polygons) - STAIR STEP STYLE */
-        .continent {
-            position: absolute;
-            background: #4caf50;
-            border: 4px solid #1b5e20;
-            box-shadow: 4px 4px 0px rgba(0,0,0,0.3);
-        }
-        
-        /* Americas: Blocky stair shape */
-        .c-americas { 
-            width: 140px; height: 280px; top: 20px; left: 80px; 
-            clip-path: polygon(
-                20% 0%, 80% 0%, 80% 20%, 100% 20%, 100% 40%, 60% 40%, 60% 50%, 80% 50%, 80% 90%, 60% 90%, 60% 100%, 20% 100%, 20% 60%, 0% 60%, 0% 40%, 20% 40%, 20% 0%
-            ); 
-        }
-        /* Europe/Africa: Blocky */
-        .c-eur-afr { 
-            width: 160px; height: 240px; top: 30px; left: 300px; 
-            clip-path: polygon(
-                20% 0%, 80% 0%, 80% 20%, 100% 20%, 100% 50%, 80% 50%, 80% 80%, 50% 80%, 50% 100%, 20% 100%, 20% 70%, 0% 70%, 0% 40%, 20% 40%, 20% 0%
-            ); 
-        }
-        /* Asia: Blocky */
-        .c-asia { 
-            width: 200px; height: 180px; top: 30px; left: 470px; 
-            clip-path: polygon(
-                0% 0%, 80% 0%, 80% 40%, 100% 40%, 100% 80%, 60% 80%, 60% 100%, 20% 100%, 20% 60%, 0% 60%, 0% 0%
-            ); 
-        }
-        /* SE Asia / Australia Block */
-        .c-se-asia { 
-            width: 80px; height: 80px; top: 200px; left: 580px; 
-            clip-path: polygon(0% 0%, 60% 0%, 60% 40%, 100% 40%, 100% 100%, 40% 100%, 40% 60%, 0% 60%, 0% 0%); 
-            background: #66bb6a; 
-        }
+        /* MAP */
+        .pixel-map { width: 100%; aspect-ratio: 2/1; background-color: #2196f3; position: relative; border: 4px solid black; margin: 0 auto; overflow: hidden; background-image: linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px); background-size: 20px 20px; }
+        .continent { position: absolute; background: #4caf50; border: 2px solid #1b5e20; box-shadow: 2px 2px 0px rgba(0,0,0,0.3); }
+        /* Scale Continents down slightly for responsive map container */
+        .c-americas { width: 20%; height: 80%; top: 5%; left: 10%; clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 80% 30%, 60% 40%, 80% 60%, 80% 80%, 60% 100%, 20% 90%, 0% 60%, 20% 40%, 0% 20%); }
+        .c-eur-afr { width: 22%; height: 70%; top: 10%; left: 40%; clip-path: polygon(20% 0%, 80% 0%, 100% 30%, 80% 50%, 90% 80%, 50% 100%, 10% 80%, 0% 40%, 20% 20%); }
+        .c-asia { width: 30%; height: 50%; top: 10%; left: 65%; clip-path: polygon(0% 0%, 80% 0%, 100% 40%, 90% 80%, 60% 100%, 20% 90%, 0% 50%); }
+        .c-se-asia { width: 10%; height: 20%; top: 60%; left: 80%; clip-path: polygon(0% 0%, 60% 0%, 60% 40%, 100% 40%, 100% 100%, 40% 100%, 40% 60%, 0% 60%, 0% 0%); background: #66bb6a; }
 
-        .map-pin {
-            position: absolute;
-            width: 16px; height: 16px;
-            background: red;
-            border: 2px solid white;
-            border-radius: 0; /* Square for pixel look */
-            transform: translate(-50%, -50%);
-            cursor: pointer;
-            z-index: 10;
-            box-shadow: 2px 2px 0px black;
-        }
-        
-        .map-pin.active {
-            background: #FFD700;
-            width: 24px; height: 24px;
-            z-index: 20;
-            animation: pulse 1s infinite;
-        }
-        
-        .map-pin.locked {
-            background: #555;
-            border-color: #999;
-        }
-
-        .map-tooltip {
-            position: absolute;
-            background: rgba(0,0,0,0.9);
-            color: white;
-            padding: 5px 10px;
-            font-size: 1.2rem;
-            white-space: nowrap;
-            pointer-events: none;
-            display: none;
-            z-index: 30;
-            top: -40px; left: 50%; transform: translateX(-50%);
-            border: 2px solid white;
-        }
-        
+        .map-pin { position: absolute; width: 12px; height: 12px; background: red; border: 2px solid white; border-radius: 0; transform: translate(-50%, -50%); cursor: pointer; z-index: 10; box-shadow: 2px 2px 0px black; }
+        .map-pin.active { background: #FFD700; width: 18px; height: 18px; z-index: 20; animation: pulse 1s infinite; }
+        .map-tooltip { position: absolute; background: rgba(0,0,0,0.9); color: white; padding: 2px 6px; font-size: 0.8rem; white-space: nowrap; pointer-events: none; display: none; z-index: 30; top: -30px; left: 50%; transform: translateX(-50%); border: 1px solid white; }
         .map-pin:hover .map-tooltip { display: block; }
 
         /* ANIMATIONS */
-        .floater {
-            position: absolute; font-size: 2rem; color: var(--accent); pointer-events: none;
-            text-shadow: 2px 2px 0px white;
-            animation: floatUp 0.8s ease-out forwards; z-index: 100;
-        }
-        .floater.crit {
-            font-size: 3.5rem; color: gold; text-shadow: 3px 3px 0px black; z-index: 101;
-        }
-        /* Dylan Bump */
+        .floater { position: absolute; font-size: 1.5rem; color: var(--accent); pointer-events: none; text-shadow: 1px 1px 0px white; animation: floatUp 0.8s ease-out forwards; z-index: 100; }
+        .floater.crit { font-size: 2.5rem; color: gold; text-shadow: 2px 2px 0px black; }
         .bump-anim { animation: bumpAnim 0.15s ease-in-out; }
         @keyframes bumpAnim { 0% { transform: scale(1); } 50% { transform: scale(0.9); } 100% { transform: scale(1); } }
         @keyframes pulse { 0% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.2); } 100% { transform: translate(-50%, -50%) scale(1); } }
-        @keyframes floatUp { 0%{transform:translateY(0);opacity:1;} 100%{transform:translateY(-100px);opacity:0;} }
+        @keyframes floatUp { 0%{transform:translateY(0);opacity:1;} 100%{transform:translateY(-80px);opacity:0;} }
 
-        /* NEWS BAR - CONTINUOUS FLOW */
-        #news-bar {
-            background: var(--news-bg); color: white; border-top: 4px solid black; height: 40px;
-            display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex-shrink: 0;
-            position: relative;
-            cursor: grab;
-        }
-        #news-bar:active { cursor: grabbing; }
-        #news-label { background: var(--accent); padding: 0 15px; height: 100%; display: flex; align-items: center; font-weight: bold; font-size: 1.4rem; z-index: 10; position: absolute; left: 0; top: 0; }
-        #news-track {
-            display: flex;
-            position: absolute;
-            left: 100px; /* Offset for label */
-            height: 100%;
-            align-items: center;
-        }
-        .news-item {
-            font-size: 1.4rem;
-            padding-right: 50px;
-            white-space: nowrap;
+        /* NEWS BAR */
+        #news-bar { background: var(--news-bg); color: white; border-top: 4px solid black; height: 30px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex-shrink: 0; position: relative; cursor: grab; }
+        #news-label { background: var(--accent); padding: 0 10px; height: 100%; display: flex; align-items: center; font-weight: bold; font-size: 1.2rem; z-index: 10; position: absolute; left: 0; top: 0; }
+        #news-track { display: flex; position: absolute; left: 80px; height: 100%; align-items: center; }
+        .news-item { font-size: 1.2rem; padding-right: 40px; white-space: nowrap; }
+
+        /* --- MOBILE RESPONSIVE --- */
+        @media (max-width: 768px) {
+            #game-container { flex-direction: column; }
+            .left-panel { flex: 1; min-height: 40%; min-width: 100%; padding: 5px; }
+            .right-panel { flex: 1.5; height: auto; min-width: 100%; }
+            #click-btn-container { width: 180px; height: 180px; }
+            #click-btn { width: 140px; height: 140px; font-size: 4rem; }
+            #dylan-sprite { margin-top: -60px; font-size: 2.5rem; } 
+            #heart-sprite { margin-top: -80px; font-size: 2rem; }
+            #resource-count { font-size: 3rem; margin-top: 0; }
+            #resource-display { margin-top: 10px; margin-bottom: 10px; }
+            .modal-box { padding: 15px; width: 95%; }
+            .modal-box h1 { font-size: 2rem; }
+            .pixel-map { width: 100%; aspect-ratio: 2/1; height: auto; }
+            #cafe-scene { height: 120px; }
+            #info-panel { height: 70px; }
+            #info-icon-container { width: 40px; height: 40px; font-size: 2rem; }
+            .bouncing-sprite { font-size: 1.5rem; }
         }
 
     </style>
 </head>
 <body>
 
+    <!-- LANGUAGE SELECT -->
+    <div id="language-overlay">
+        <div class="modal-box">
+            <h1>SELECT LANGUAGE</h1>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button class="pixel-btn" onclick="setLanguage('en')">ENGLISH</button>
+                <button class="pixel-btn" onclick="setLanguage('hu')">MAGYAR</button>
+                <button class="pixel-btn" onclick="setLanguage('nl')">NEDERLANDS</button>
+                <button class="pixel-btn" onclick="setLanguage('vi')">TIẾNG VIỆT</button>
+            </div>
+        </div>
+    </div>
+
     <!-- INTRO -->
     <div id="intro-overlay">
         <div class="modal-box">
-            <h1>Hani's Matcha Story</h1>
-            <p>
-                Hani loved matcha. But the matcha in her city was... sad. Watery. Green dust.
-                <br><br>
-                One day, she grabbed her <strong>Ancestors' Legendary Whisk</strong> and made a vow:
-                <br>
-                <strong style="color:var(--accent); font-size:1.8rem;">"I will show the world what REAL matcha tastes like."</strong>
-                <br><br>
-                From a humble cart to a global empire. It starts with one whisk.
-            </p>
-            <button class="pixel-btn" onclick="startGame()">START</button>
+            <h1 id="intro-title"></h1>
+            <p id="intro-text"></p>
+            <button class="pixel-btn" onclick="showTutorial()" data-i18n="btn_start">START</button>
+        </div>
+    </div>
+
+    <!-- TUTORIAL -->
+    <div id="tutorial-overlay">
+        <div class="modal-box">
+            <h1 id="tut-title"></h1>
+            <div style="text-align:left; font-size:1.4rem;">
+                <p id="tut-step-1"></p>
+                <p id="tut-step-2"></p>
+                <p id="tut-step-3"></p>
+            </div>
+            <button class="pixel-btn" onclick="startGame()" data-i18n="btn_letsgo">LET'S GO!</button>
         </div>
     </div>
 
     <!-- MENU OVERLAY -->
     <div id="menu-overlay">
         <div class="modal-box">
-            <h1>MENU</h1>
+            <h1 data-i18n="ui_menu">MENU</h1>
             <button class="pixel-btn" id="mute-btn-menu" onclick="toggleAudio()">🔊 SOUND ON</button>
             <br>
-            <button class="pixel-btn" onclick="toggleMap()">🗺️ VIEW MAP</button>
+            <button class="pixel-btn" onclick="toggleMap()" data-i18n="ui_map">🗺️ MAP</button>
             <br>
-            <button class="pixel-btn" onclick="toggleStats()">📊 STATISTICS</button>
+            <button class="pixel-btn" onclick="toggleStats()" data-i18n="ui_stats">📊 STATS</button>
+            <br>
+            <div style="margin: 10px 0; border: 1px dashed #000; padding: 10px;">
+                <p style="margin:0 0 5px 0; font-size:1rem;" data-i18n="ui_lang">LANGUAGE</p>
+                <button class="pixel-btn small" onclick="setLanguage('en')">EN</button>
+                <button class="pixel-btn small" onclick="setLanguage('hu')">HU</button>
+                <button class="pixel-btn small" onclick="setLanguage('nl')">NL</button>
+                <button class="pixel-btn small" onclick="setLanguage('vi')">VI</button>
+            </div>
             <hr>
-            <button class="pixel-btn" style="background:#555;" onclick="toggleMenu()">RESUME</button>
+            <button class="pixel-btn" style="background:#555;" onclick="toggleMenu()" data-i18n="ui_resume">RESUME</button>
             <br><br>
-            <button class="pixel-btn small" style="background:red;" onclick="resetGame()">RESET SAVE</button>
+            <button class="pixel-btn small" style="background:red;" onclick="showResetConfirm()" data-i18n="ui_reset">RESET SAVE</button>
+        </div>
+    </div>
+
+    <!-- RESET CONFIRM OVERLAY -->
+    <div id="reset-overlay">
+        <div class="modal-box">
+            <h2 data-i18n="reset_confirm">Are you sure?</h2>
+            <p data-i18n="reset_desc">This will wipe your save.</p>
+            <button class="pixel-btn" onclick="confirmReset()" data-i18n="btn_yes">YES</button>
+            <button class="pixel-btn" onclick="closeReset()" data-i18n="btn_no">NO</button>
         </div>
     </div>
 
     <!-- MAP OVERLAY -->
     <div id="map-overlay">
         <div class="modal-box" style="width: 800px; max-width: 95%;">
-            <h1>WORLD TOUR MAP</h1>
+            <h1 data-i18n="ui_worldmap">WORLD TOUR MAP</h1>
             <div class="pixel-map" id="map-container">
-                <!-- Continents -->
                 <div class="continent c-americas"></div>
                 <div class="continent c-eur-afr"></div>
                 <div class="continent c-asia"></div>
                 <div class="continent c-se-asia"></div>
-                <!-- Pins Generated by JS -->
+                <!-- Pins via JS -->
             </div>
             <br>
-            <button class="pixel-btn" onclick="toggleMap()">CLOSE MAP</button>
+            <button class="pixel-btn" onclick="toggleMap()" data-i18n="ui_close">CLOSE</button>
         </div>
     </div>
 
-    <!-- NEWSPAPER OVERLAY (KLDRNEWS2) -->
+    <!-- NEWSPAPER OVERLAY -->
     <div id="newspaper-overlay">
         <div class="newspaper">
             <div class="news-close" onclick="closeNewspaper()">X</div>
             <div class="news-header">
                 <div class="news-logo">KLDRNEWS2</div>
-                <div class="news-sub">THE MATCHA CHRONICLES</div>
+                <div class="news-sub" data-i18n="news_sub">THE MATCHA CHRONICLES</div>
             </div>
-            <div class="news-headline" id="np-headline">EXTRA! EXTRA!</div>
-            <div class="news-body" id="np-body">Something happened!</div>
-            <button class="pixel-btn small" onclick="closeNewspaper()">READ MORE</button>
+            <div class="news-headline" id="np-headline"></div>
+            <div class="news-body" id="np-body"></div>
+            <button class="pixel-btn small" onclick="closeNewspaper()" data-i18n="btn_readmore">READ MORE</button>
         </div>
     </div>
 
     <!-- STATS OVERLAY -->
     <div id="stats-overlay">
         <div class="modal-box">
-            <h2>Café Statistics</h2>
-            <div id="stats-content">
-                <!-- Injected via JS -->
-            </div>
-            <button class="pixel-btn" onclick="toggleStats()">CLOSE</button>
+            <h2 data-i18n="ui_stats_title">Café Statistics</h2>
+            <div id="stats-content"></div>
+            <button class="pixel-btn" onclick="toggleStats()" data-i18n="ui_close">CLOSE</button>
+        </div>
+    </div>
+
+    <!-- LEVEL UP POPUP -->
+    <div id="location-popup">
+        <div class="modal-box">
+            <h2 id="loc-popup-title"></h2>
+            <p id="loc-popup-desc"></p>
+            <button class="pixel-btn" onclick="closeLocPopup()" data-i18n="btn_nice">NICE</button>
         </div>
     </div>
 
@@ -618,18 +424,17 @@
         
         <!-- LEFT PANEL -->
         <div class="left-panel">
-            <button class="pixel-btn small" id="menu-btn" onclick="toggleMenu()">MENU</button>
+            <button class="pixel-btn small" id="menu-btn" onclick="toggleMenu()" data-i18n="ui_menu">MENU</button>
 
             <div class="resource-display">
                 <div id="resource-count">0</div>
-                <div>MATCHAS</div>
+                <div data-i18n="currency">MATCHAS</div>
                 <div id="rps-display">0 / SEC</div>
                 <div id="active-rps"></div>
             </div>
             
             <div id="click-btn-container">
                 <div id="click-btn"></div>
-                <!-- Orbiting Helpers -->
                 <div id="dylan-orbit-wrapper" class="orbit-wrapper">
                     <div id="dylan-sprite" class="orbiter-sprite">👨🏾‍🦱</div>
                 </div>
@@ -639,7 +444,7 @@
             </div>
             
             <div style="margin-top: auto; text-align: center; color: var(--text-color); width: 100%;">
-                <p style="font-size: 1.2rem; margin: 0;" id="goal-text">NEXT GOAL: Unlock Spain</p>
+                <p style="font-size: 1.2rem; margin: 0;" id="goal-text"></p>
                 <div class="progress-container">
                     <div class="progress-fill" id="goal-progress"></div>
                 </div>
@@ -648,236 +453,312 @@
 
         <!-- RIGHT PANEL -->
         <div class="right-panel">
-            
-            <!-- 1. CAFE SCENE -->
             <div id="cafe-scene">
-                <div class="scene-label" onclick="toggleStats()">HANI'S CAFÉ FLOOR (STATS)</div>
-                <!-- Ensure container exists -->
+                <div class="scene-label" onclick="toggleStats()" data-i18n="scene_label">HANI'S CAFÉ FLOOR (STATS)</div>
                 <div id="sprite-container"></div>
             </div>
 
-            <!-- 2. INFO PANEL -->
             <div id="info-panel">
                 <div id="info-icon-container">?</div>
                 <div id="info-text">
-                    <h3 id="info-title">Welcome</h3>
-                    <p id="info-desc">Hover over items to see details.</p>
+                    <h3 id="info-title" data-i18n="welcome">Welcome</h3>
+                    <p id="info-desc" data-i18n="hover_info">Hover over items to see details.</p>
                     <div id="info-cost"></div>
                 </div>
             </div>
 
-            <!-- 3. TABS -->
             <div class="tabs-header">
-                <button class="tab-btn active" onclick="switchTab('buildings')">Buildings</button>
-                <button class="tab-btn" onclick="switchTab('upgrades')">Upgrades</button>
-                <button class="tab-btn" onclick="switchTab('passport')">Passport</button>
+                <button class="tab-btn active" onclick="switchTab('buildings')" data-i18n="tab_buildings">Buildings</button>
+                <button class="tab-btn" onclick="switchTab('upgrades')" data-i18n="tab_upgrades">Upgrades</button>
+                <button class="tab-btn" onclick="switchTab('passport')" data-i18n="tab_passport">Passport</button>
             </div>
 
-            <!-- 4. CONTENT -->
-            <div id="tab-buildings" class="tab-content active">
-                <!-- Buildings List injected here -->
-            </div>
+            <div id="tab-buildings" class="tab-content active"></div>
             <div id="tab-upgrades" class="tab-content">
-                <div class="upgrades-grid" id="upgrades-list">
-                    <!-- Upgrades Grid injected here -->
-                </div>
-                <p style="text-align:center; color:#777; margin-top:20px;">Buy upgrades to boost production!</p>
+                <div class="upgrades-grid" id="upgrades-list"></div>
+                <p style="text-align:center; color:#777; margin-top:20px;" data-i18n="buy_upgrades">Buy upgrades to boost production!</p>
             </div>
             <div id="tab-passport" class="tab-content">
-                <h3>Current Location</h3>
+                <h3 data-i18n="curr_loc">Current Location</h3>
                 <div id="passport-loc" style="font-size:1.5rem; margin-bottom:10px;">Hungary 🇭🇺</div>
                 <div id="passport-mult" style="color:var(--primary); font-weight:bold;">Multiplier: x1</div>
-                
-                <h3 style="margin-top:20px; border-top:2px solid #ccc; padding-top:10px;">Active Passives</h3>
-                <div id="passives-list">
-                    <!-- Bought upgrades list -->
-                </div>
+                <h3 style="margin-top:20px; border-top:2px solid #ccc; padding-top:10px;" data-i18n="passives">Active Passives</h3>
+                <div id="passives-list"></div>
             </div>
-
         </div>
     </div>
 
-    <!-- NEWS BAR -->
     <div id="news-bar" onmousedown="pauseNews()" onmouseup="resumeNews()" onmouseleave="resumeNews()" ontouchstart="pauseNews()" ontouchend="resumeNews()">
-        <div id="news-label">NEWS</div>
+        <div id="news-label" data-i18n="ui_news">NEWS</div>
         <div id="news-track"></div>
     </div>
 
     <script>
+        /* --- TRANSLATION DATA --- */
+        const LANG = {
+            en: {
+                intro_title: "Hani's Holiday Matcha",
+                intro_text: "It's Christmas time! Hani wants to bring the warmth of REAL Matcha to the world. Grab the Legendary Whisk and start the journey!",
+                tut_title: "HOW TO PLAY",
+                tut_1: "1. CLICK the big Matcha.",
+                tut_2: "2. BUY buildings & upgrades.",
+                tut_3: "3. TRAVEL the world!",
+                currency: "MATCHAS",
+                tab_buildings: "Buildings",
+                tab_upgrades: "Upgrades",
+                tab_passport: "Passport",
+                welcome: "Welcome",
+                hover_info: "Hover over items for details.",
+                buy_upgrades: "Buy upgrades to boost production!",
+                curr_loc: "Current Location",
+                passives: "Active Passives",
+                goal_prefix: "NEXT GOAL:",
+                goal_global: "GLOBAL DOMINATION!",
+                ui_menu: "MENU", ui_map: "🗺️ VIEW MAP", ui_worldmap: "WORLD TOUR MAP", ui_stats: "📊 STATISTICS", ui_stats_title: "Café Statistics", ui_lang: "LANGUAGE", ui_resume: "RESUME", ui_reset: "RESET SAVE", ui_close: "CLOSE", ui_news: "NEWS",
+                btn_start: "START", btn_letsgo: "LET'S GO!", btn_nice: "NICE", btn_readmore: "READ MORE", btn_yes: "YES", btn_no: "NO",
+                news_sub: "THE MATCHA CHRONICLES", scene_label: "HANI'S CAFÉ FLOOR (STATS)", loc_new: "NEW COUNTRY!", loc_arrived: "You have arrived.", reset_confirm: "Are you sure?", reset_desc: "This will wipe your save.",
+
+                b0_n: "Bamboo Whisk", b0_d: "Faster frothing.", b0_n_t2: "Robo-Arm Whisk", b0_d_t2: "Industrial frothing automation.", b0_n_t3: "Quantum Whisk", b0_d_t3: "Froths at sub-atomic levels.",
+                b1_n: "Lili (Sister)", b1_d: "She helps out!", b1_n_t2: "Manager Lili", b1_d_t2: "She runs the place now.", b1_n_t3: "CEO Lili", b1_d_t3: "She runs the world now.",
+                b2_n: "Plastic Stool", b2_d: "More seats!", b2_n_t2: "Velvet Sofa", b2_d_t2: "Luxury seating.", b2_n_t3: "Golden Throne", b2_d_t3: "Seating for royalty.",
+                b3_n: "Delivery Fleet", b3_d: "Motorbikes everywhere.", b3_n_t2: "Matcha Drones", b3_d_t2: "Airborne tea delivery.", b3_n_t3: "Teleporters", b3_d_t3: "Instant tea transmission.",
+                b4_n: "Da Lat Tea Hill", b4_d: "Fresh from the mountains.", b4_n_t2: "Bio-Plantation", b4_d_t2: "Genetically perfect leaves.", b4_n_t3: "Matcha Golem", b4_d_t3: "Living tea guardians.",
+                b5_n: "Matcha Lab", b5_d: "Science of flavor.", b5_n_t2: "Flavor Reactor", b5_d_t2: "Atomic level taste.", b5_n_t3: "Taste Singularity", b5_d_t3: "Flavor so dense light can't escape.",
+                b6_n: "Matcha NGO", b6_d: "Charity work for tea.", b6_n_t2: "World Peace Org", b6_d_t2: "Tea brings peace.", b6_n_t3: "Galactic Senate", b6_d_t3: "Universal harmony.",
+                b7_n: "Spirit Portal", b7_d: "Summon the Matcha Gods.", b7_n_t2: "Reality Rift", b7_d_t2: "Tea from the 5th dimension.", b7_n_t3: "Big Bang Brewer", b7_d_t3: "Creating universes of tea.",
+
+                loc_0: "Hungary", loc_1: "Spain", loc_2: "Netherlands", loc_3: "UK", loc_4: "Guyana", loc_5: "Suriname", loc_6: "USA", loc_7: "Vietnam", loc_8: "Matcha Earth",
+
+                u_condensed_milk: "Condensed Milk", u_condensed_milk_d: "Clicks x2",
+                u_dylan: "Dylan (BF)", u_dylan_d: "Auto-Clicks every 10s",
+                u_dylan_2: "Dylan's Training", u_dylan_2_d: "Dylan clicks 2s faster",
+                u_dylan_3: "Dylan's Cardio", u_dylan_3_d: "Dylan clicks 2s faster",
+                u_dylan_4: "Dylan's Espresso", u_dylan_4_d: "Dylan clicks 1.5s faster",
+                u_dylan_5: "Dylan's Spirit", u_dylan_5_d: "Dylan clicks 1s faster",
+                u_dylan_6: "Time Warp", u_dylan_6_d: "Dylan hits max speed (0.1s)",
+                u_unending_love: "Unending Love", u_unending_love_d: "Double the love! 2nd Auto-Clicker.",
+                u_blueberry: "Blueberry Mix", u_blueberry_d: "Whisks x2",
+                u_spoon: "Matcha Spoon", u_spoon_d: "Click gains 5% of MPS",
+                u_barni: "Barni (Artist)", u_barni_d: "Barni paints! Global +20%",
+                u_lucky: "Uncle Lucky", u_lucky_d: "10% Chance for 2x Click",
+                u_modeling: "Modeling Contract", u_modeling_d: "Lili is famous! Lili x2",
+                u_vini: "Daily Call from Vini", u_vini_d: "Brotherly motivation! Global x1.3",
+                u_naomi: "Naomi's Magic Ball", u_naomi_d: "Future is bright! +10% Crit Chance",
+                u_richi: "Richi's Sprint", u_richi_d: "Track star delivery! Fleet x2",
+                u_orsidia: "BFF Orsi & Dia", u_orsidia_d: "Besties support! Global x1.4",
+                u_bao: "Bao's Discovery", u_bao_d: "Found the medal! Click Power x1.25",
+                u_adri: "Adri's Peace", u_adri_d: "Reunited Guyana & Suriname! Global x2.0",
+                u_cat: "Shop Cat", u_cat_d: "Cute! Global +10%",
+                u_boss_woman: "Boss Woman", u_boss_woman_d: "Hani runs an NGO now. Global x1.5",
+                u_fertilizer: "Organic Fertilizer", u_fertilizer_d: "Tea Hills x2 Production",
+                u_nguyen: "All I Do Is Nguyen", u_nguyen_d: "Win win win! Global x1.5",
+                u_trade_deal: "VN-JP Trade Deal", u_trade_deal_d: "Big Business! Global +50%",
+
+                n_start_1: "Hani tries to put paprika in matcha. Hungarians are confused.",
+                n_start_2: "Local Budapest resident: 'Is this soup?'",
+                n_matchyar: "Breaking: Magyar now officially called 'Matchyar'.",
+                n_spain_1: "Hani is dancing Flamenco with a whisk in hand.",
+                n_spain_2: "Siesta time canceled, too much caffeine in the air.",
+                n_nl_1: "Dutch news: Green tea stroopwafels are the new craze.",
+                n_nl_2: "Amsterdam canal turns green... authorities suspect Hani.",
+                n_uk_1: "The Queen has been spotted sipping Hani's Special Blend.",
+                n_uk_2: "London fog is actually just matcha steam.",
+                n_guyana: "Hani exploring the Kaieteur Falls with a cup of tea.",
+                n_adri: "Adri has successfully negotiated a peace treaty using only Matcha.",
+                n_suri_1: "Paramaribo market sold out of green powder.",
+                n_suri_2: "Hani says Suriname reminds her of the good vibes.",
+                n_richi: "Richi wins gold medal in Matcha Delivery Olympics.",
+                n_vn_1: "Hani finally arrives in Vietnam! The tea is perfect.",
+                n_vn_2: "Hanoi traffic stopped for giant tea parade.",
+                n_dylan: "Dylan has drank {n} cups of matcha. He is vibrating.",
+                n_lili: "Breaking: Lili has evolved. She cloned herself to cover the night shift.",
+                n_lili_2: "Customers confused seeing multiple Lilis at once. 'I'm just fast', she claims.",
+                n_lucky: "Uncle Lucky says: 'Put it all on Green!'",
+                n_naomi: "Naomi predicts high profits today.",
+                n_orsi: "Orsi & Dia are posting 5-star reviews everywhere.",
+                n_cat: "Shop cat accidentally orders 5000kg of fish.",
+                n_bao: "Bao found a shiny thing. It was the lost medal!",
+                n_boss: "Hani elected president of the Matcha NGO.",
+                n_sci: "Scientists say the world is 70% water, 30% matcha.",
+                n_blackhole: "Hani accidentally creates a black hole of flavor. It tastes grassy.",
+                n_save: "Reality creates a save point because the matcha is too good.",
+                n_aliens: "Aliens land, ask for 'The Green Stuff'.",
+                n_earth: "EARTH IS GREEN.",
+                n_dylan_10: "Dylan's hands are shaking from matcha overload.",
+                n_dylan_100: "Dylan can see time.",
+                n_dylan_1k: "Dylan has ascended beyond the need for sleep.",
+                n_dylan_10k: "Dylan vibrates at the frequency of the universe.",
+                n_dylan_100k: "Dylan is no longer man, but pure energy.",
+                n_dylan_1m: "Dylan has become the Matcha Singularity.",
+                n_dylan_10m: "Dylan has surpassed 10,000,000 cups. He is now a constellation.",
+                n_gen_1: "Green clouds spotted over the city.",
+                n_gen_2: "Breaking: Coffee beans go on strike.",
+                n_gen_3: "Matcha is the new water.",
+                n_gen_4: "Local man claims he turned green after drinking too much matcha.",
+                n_gen_5: "Hani's cafe wins 'Greenest Place on Earth' award."
+            },
+            // Fallbacks for other languages to prevent crashing
+            hu: { intro_title: "Hani Matcha Kávézója", currency: "MATCHA", welcome: "Üdv", hover_info: "Részletek...", ui_menu: "MENÜ", ui_map: "TÉRKÉP", ui_stats: "STATISZTIKA", btn_start: "INDÍTÁS", btn_letsgo: "GYERÜNK", b0_n: "Habverő", b0_d: "Gyorsabb habosítás." },
+            nl: { intro_title: "Hani's Matcha Café", currency: "MATCHA'S", welcome: "Welkom", hover_info: "Details...", ui_menu: "MENU", ui_map: "KAART", ui_stats: "STATISTIEKEN", btn_start: "START", btn_letsgo: "GAAN!", b0_n: "Garde", b0_d: "Sneller kloppen." },
+            vi: { intro_title: "Cà phê Matcha của Hani", currency: "MATCHA", welcome: "Chào mừng", hover_info: "Chi tiết...", ui_menu: "MENU", ui_map: "BẢN ĐỒ", ui_stats: "THỐNG KÊ", btn_start: "BẮT ĐẦU", btn_letsgo: "ĐI THÔI!", b0_n: "Cây đánh trà", b0_d: "Đánh nhanh hơn." }
+        };
+        
+        let currentLang = 'en';
+
+        function getText(key) {
+            // Check current lang, then fallback to EN, then fallback to key itself
+            if (LANG[currentLang] && LANG[currentLang][key]) return LANG[currentLang][key];
+            if (LANG['en'][key]) return LANG['en'][key];
+            return key;
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.getElementById('language-overlay').style.display = 'none';
+            document.getElementById('intro-overlay').style.display = 'flex';
+            
+            // Safe DOM updates
+            const setTitle = (id, key) => { const el = document.getElementById(id); if(el) el.innerText = getText(key); };
+            const setHTML = (id, key) => { const el = document.getElementById(id); if(el) el.innerHTML = getText(key).replace('\n', '<br>'); };
+            
+            setTitle('intro-title', 'intro_title');
+            setHTML('intro-text', 'intro_text');
+            setTitle('tut-title', 'tut_title');
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                el.innerText = getText(el.getAttribute('data-i18n'));
+            });
+
+            setHTML('tut-step-1', 'tut_1');
+            setHTML('tut-step-2', 'tut_2');
+            setHTML('tut-step-3', 'tut_3');
+
+            // Force refresh of UI components
+            updateUI();
+            
+            // Clear news track so new language news spawns immediately
+            const newsTrack = document.getElementById('news-track');
+            if(newsTrack) newsTrack.innerHTML = '';
+            recentNews = []; 
+            
+            // Re-render shop to update building names
+            renderShop();
+        }
+
+        function showTutorial() {
+            document.getElementById('intro-overlay').style.display = 'none';
+            document.getElementById('tutorial-overlay').style.display = 'flex';
+        }
+        
+        function showResetConfirm() {
+            document.getElementById('reset-overlay').style.display = 'flex';
+            document.getElementById('menu-overlay').style.display = 'none';
+        }
+        
+        function closeReset() {
+            document.getElementById('reset-overlay').style.display = 'none';
+            document.getElementById('menu-overlay').style.display = 'flex';
+        }
+        
+        function confirmReset() {
+            localStorage.removeItem('haniVibrantSave');
+            location.reload();
+        }
+
+        /* --- CONFIG --- */
         const CONFIG = {
             fps: 30,
             locations: [
-                { 
-                    id: 0, name: "Hungary", flag: "🇭🇺", threshold: 0, multiplier: 1, 
-                    colors: { bg: "#CD2A3E", pat: "#436F4D", pri: "#436F4D", acc: "#CD2A3E", txt: "#212121" }, 
-                    welcome: "Welcome to Budapest! It's cold, but the tea is hot.",
-                    music: [220, 246, 261, 293, 329, 349, 415, 440],
-                    coords: { top: '28%', left: '54%' }
-                },
-                { 
-                    id: 1, name: "Spain", flag: "🇪🇸", threshold: 500, multiplier: 1.5, 
-                    colors: { bg: "#AA151B", pat: "#F1BF00", pri: "#F1BF00", acc: "#AA151B", txt: "#212121" }, 
-                    welcome: "Hola! Hani serves Matcha Tapas now.",
-                    music: [329, 349, 392, 415, 392, 349, 329, 293],
-                    coords: { top: '35%', left: '49%' }
-                },
-                { 
-                    id: 2, name: "Netherlands", flag: "🇳🇱", threshold: 2500, multiplier: 2, 
-                    colors: { bg: "#F36C21", pat: "#21468B", pri: "#F36C21", acc: "#21468B", txt: "#212121" }, 
-                    welcome: "Amsterdam! Stroopwafels and Matcha.",
-                    music: [261, 329, 392, 523, 392, 329, 261, 196],
-                    coords: { top: '25%', left: '51%' }
-                },
-                { 
-                    id: 3, name: "UK", flag: "🇬🇧", threshold: 15000, multiplier: 3, 
-                    colors: { bg: "#012169", pat: "#C8102E", pri: "#012169", acc: "#C8102E", txt: "#FFFFFF" }, 
-                    welcome: "London Calling! Swap the Earl Grey for Matcha.",
-                    music: [392, 392, 440, 493, 392, 293, 392, 493],
-                    coords: { top: '24%', left: '49%' }
-                },
-                {
-                    id: 4, name: "Guyana", flag: "🇬🇾", threshold: 50000, multiplier: 4,
-                    colors: { bg: "#009E49", pat: "#FCD116", pri: "#CE1126", acc: "#000000", txt: "#212121" },
-                    welcome: "Welcome to Guyana! The Land of Many Waters... and now Matcha!",
-                    music: [261, 329, 392, 440, 392, 329, 293, 261],
-                    coords: { top: '55%', left: '25%' }
-                },
-                {
-                    id: 5, name: "Suriname", flag: "🇸🇷", threshold: 150000, multiplier: 4.5,
-                    colors: { bg: "#377E3F", pat: "#FFFFFF", pri: "#B40A2D", acc: "#ECC81D", txt: "#212121" },
-                    welcome: "Suriname! Beautiful nature and powerful tea.",
-                    music: [329, 392, 440, 523, 440, 392, 329, 261],
-                    coords: { top: '55%', left: '27%' }
-                },
-                { 
-                    id: 6, name: "USA", flag: "🇺🇸", threshold: 500000, multiplier: 5, 
-                    colors: { bg: "#3C3B6E", pat: "#B22234", pri: "#B22234", acc: "#FFFFFF", txt: "#FFFFFF" }, 
-                    welcome: "USA! The land of opportunity and iced matcha lattes.",
-                    music: [261, 329, 392, 523, 659, 523, 392, 329],
-                    coords: { top: '30%', left: '15%' }
-                },
-                { 
-                    id: 7, name: "Vietnam", flag: "🇻🇳", threshold: 1500000, multiplier: 6, 
-                    colors: { bg: "#ff007f", pat: "#ff4081", pri: "#00e676", acc: "#651fff", txt: "#212121" }, 
-                    welcome: "Home sweet home! The Ultimate HQ.",
-                    music: [261, 293, 349, 392, 440, 523],
-                    coords: { top: '45%', left: '72%' }
-                },
-                { 
-                    id: 8, name: "Matcha Earth", flag: "🌍", threshold: 100000000, multiplier: 10, 
-                    colors: { bg: "#000000", pat: "#00ff00", pri: "#00ff00", acc: "#ffffff", txt: "#00ff00" }, 
-                    welcome: "You have conquered the planet. The world is green.",
-                    music: [523, 659, 784, 1046],
-                    coords: { top: '50%', left: '50%' }
-                }
+                { id: 0, name: "Hungary", flag: "🇭🇺", threshold: 0, multiplier: 1, colors: { bg: "#8f1e1e", pat: "#165b33", pri: "#165b33", acc: "#d4af37", txt: "#212121" }, music: [220, 246, 261, 293, 329, 349, 415, 440], coords: { top: '28%', left: '54%' } },
+                { id: 1, name: "Spain", flag: "🇪🇸", threshold: 500, multiplier: 1.5, colors: { bg: "#AA151B", pat: "#F1BF00", pri: "#F1BF00", acc: "#AA151B", txt: "#212121" }, music: [329, 349, 392, 415, 392, 349, 329, 293], coords: { top: '35%', left: '49%' } },
+                { id: 2, name: "Netherlands", flag: "🇳🇱", threshold: 2500, multiplier: 2, colors: { bg: "#F36C21", pat: "#21468B", pri: "#F36C21", acc: "#21468B", txt: "#212121" }, music: [261, 329, 392, 523, 392, 329, 261, 196], coords: { top: '25%', left: '51%' } },
+                { id: 3, name: "UK", flag: "🇬🇧", threshold: 15000, multiplier: 3, colors: { bg: "#012169", pat: "#C8102E", pri: "#012169", acc: "#C8102E", txt: "#FFFFFF" }, music: [392, 392, 440, 493, 392, 293, 392, 493], coords: { top: '24%', left: '49%' } },
+                { id: 4, name: "Guyana", flag: "🇬🇾", threshold: 50000, multiplier: 4, colors: { bg: "#009E49", pat: "#FCD116", pri: "#CE1126", acc: "#000000", txt: "#212121" }, music: [261, 329, 392, 440, 392, 329, 293, 261], coords: { top: '55%', left: '25%' } },
+                { id: 5, name: "Suriname", flag: "🇸🇷", threshold: 150000, multiplier: 4.5, colors: { bg: "#377E3F", pat: "#FFFFFF", pri: "#B40A2D", acc: "#ECC81D", txt: "#212121" }, music: [329, 392, 440, 523, 440, 392, 329, 261], coords: { top: '55%', left: '27%' } },
+                { id: 6, name: "USA", flag: "🇺🇸", threshold: 500000, multiplier: 5, colors: { bg: "#3C3B6E", pat: "#B22234", pri: "#B22234", acc: "#FFFFFF", txt: "#FFFFFF" }, music: [261, 329, 392, 523, 659, 523, 392, 329], coords: { top: '30%', left: '15%' } },
+                { id: 7, name: "Vietnam", flag: "🇻🇳", threshold: 1500000, multiplier: 6, colors: { bg: "#ff007f", pat: "#ff4081", pri: "#00e676", acc: "#651fff", txt: "#212121" }, music: [261, 293, 349, 392, 440, 523], coords: { top: '45%', left: '72%' } },
+                { id: 8, name: "Matcha Earth", flag: "🌍", threshold: 100000000, multiplier: 10, colors: { bg: "#000000", pat: "#00ff00", pri: "#00ff00", acc: "#ffffff", txt: "#00ff00" }, music: [523, 659, 784, 1046], coords: { top: '50%', left: '50%' } }
             ],
             buildings: [
-                { id: 0, name: "Bamboo Whisk", symbol: "🥣", baseCost: 15, baseProd: 0.5, desc: "Faster frothing.", 
-                  evolved: { name: "Robo-Arm Whisk", symbol: "🦾", desc: "Industrial frothing automation." },
-                  evolved2: { name: "Quantum Whisk", symbol: "⚛️", desc: "Froths at sub-atomic levels." } 
-                },
-                { id: 1, name: "Lili (Sister)", symbol: "👩🏻", baseCost: 100, baseProd: 4, desc: "She helps out!", anim: "sprite", 
-                  evolved: { name: "Manager Lili", symbol: "👩🏻‍💼", desc: "She runs the place now." },
-                  evolved2: { name: "CEO Lili", symbol: "🕴️", desc: "She runs the world now." }
-                },
-                { id: 2, name: "Plastic Stool", symbol: "🪑", baseCost: 1100, baseProd: 12, desc: "More seats!", 
-                  evolved: { name: "Velvet Sofa", symbol: "🛋️", desc: "Luxury seating." },
-                  evolved2: { name: "Golden Throne", symbol: "💺", desc: "Seating for royalty." } 
-                },
-                { id: 3, name: "Delivery Fleet", symbol: "🛵", baseCost: 12000, baseProd: 47, desc: "Motorbikes everywhere.", anim: "sprite", 
-                  evolved: { name: "Matcha Drones", symbol: "🚁", desc: "Airborne tea delivery." },
-                  evolved2: { name: "Teleporters", symbol: "🚪", desc: "Instant tea transmission." }
-                },
-                { id: 4, name: "Da Lat Tea Hill", symbol: "⛰️", baseCost: 130000, baseProd: 260, desc: "Fresh from the mountains.", anim: "sprite", 
-                  evolved: { name: "Bio-Plantation", symbol: "🧬", desc: "Genetically perfect leaves." },
-                  evolved2: { name: "Matcha Golem", symbol: "🗿", desc: "Living tea guardians." }
-                },
-                { id: 5, name: "Matcha Lab", symbol: "🧪", baseCost: 1400000, baseProd: 1400, desc: "Science of flavor.", anim: "sprite", 
-                  evolved: { name: "Flavor Reactor", symbol: "☢️", desc: "Atomic level taste." },
-                  evolved2: { name: "Taste Singularity", symbol: "🕳️", desc: "Flavor so dense light can't escape." }
-                },
-                { id: 6, name: "Matcha NGO", symbol: "🤝", baseCost: 10000000, baseProd: 6000, desc: "Charity work for tea.", anim: "sprite", 
-                  evolved: { name: "World Peace Org", symbol: "🕊️", desc: "Tea brings peace." },
-                  evolved2: { name: "Galactic Senate", symbol: "👽", desc: "Universal harmony." }
-                },
-                { id: 7, name: "Spirit Portal", symbol: "🌀", baseCost: 50000000, baseProd: 15000, desc: "Summon the Matcha Gods.", anim: "sprite", 
-                  evolved: { name: "Reality Rift", symbol: "🌌", desc: "Tea from the 5th dimension." },
-                  evolved2: { name: "Big Bang Brewer", symbol: "💥", desc: "Creating universes of tea." }
-                }
+                { id: 0, baseCost: 15, baseProd: 0.5, symbol: "🥣", evolved: {symbol: "🦾"}, evolved2: {symbol: "⚛️"} },
+                { id: 1, baseCost: 100, baseProd: 4, symbol: "👩🏻", anim: "sprite", evolved: {symbol: "👩🏻‍💼"}, evolved2: {symbol: "🕴️"} },
+                { id: 2, baseCost: 1100, baseProd: 12, symbol: "🪑", evolved: {symbol: "🛋️"}, evolved2: {symbol: "💺"} },
+                { id: 3, baseCost: 12000, baseProd: 47, symbol: "🛵", anim: "sprite", evolved: {symbol: "🚁"}, evolved2: {symbol: "🚪"} },
+                { id: 4, baseCost: 130000, baseProd: 260, symbol: "⛰️", anim: "sprite", evolved: {symbol: "🧬"}, evolved2: {symbol: "🗿"} },
+                { id: 5, baseCost: 1400000, baseProd: 1400, symbol: "🧪", anim: "sprite", evolved: {symbol: "☢️"}, evolved2: {symbol: "🕳️"} },
+                { id: 6, baseCost: 10000000, baseProd: 6000, symbol: "🤝", anim: "sprite", evolved: {symbol: "🕊️"}, evolved2: {symbol: "👽"} },
+                { id: 7, baseCost: 50000000, baseProd: 15000, symbol: "🌀", anim: "sprite", evolved: {symbol: "🌌"}, evolved2: {symbol: "💥"} }
             ],
-            // Upgrades sorted by cost in init()
             upgrades: [
-                { id: 'condensed_milk', name: "Condensed Milk", icon: "🥛", desc: "Clicks x2", cost: 500, type: 'click_mult', value: 2, trigger: g => g.total >= 100 },
-                // Dylan Base: 10s -> Cheap & Early
-                { id: 'dylan', name: "Dylan (BF)", icon: "👨🏾‍🦱", desc: "Auto-Clicks every 10s", cost: 250, type: 'special', value: 0, trigger: g => g.total >= 100, visual: "👨🏾‍🦱" },
-                // Dylan Upgrades
-                { id: 'dylan_2', name: "Dylan's Training", icon: "💪", desc: "Dylan clicks 2s faster (8s)", cost: 5000, type: 'special', value: 0, trigger: g => g.loc >= 1 && g.upgrades.includes('dylan') }, 
-                { id: 'dylan_3', name: "Dylan's Cardio", icon: "🏃🏾", desc: "Dylan clicks 2s faster (6s)", cost: 25000, type: 'special', value: 0, trigger: g => g.loc >= 2 && g.upgrades.includes('dylan_2') }, 
-                { id: 'dylan_4', name: "Dylan's Espresso", icon: "☕", desc: "Dylan clicks 2s faster (4s)", cost: 100000, type: 'special', value: 0, trigger: g => g.loc >= 3 && g.upgrades.includes('dylan_3') }, 
-                { id: 'dylan_5', name: "Dylan's Spirit", icon: "🧘🏾‍♂️", desc: "Dylan clicks 2s faster (2s)", cost: 500000, type: 'special', value: 0, trigger: g => g.loc >= 4 && g.upgrades.includes('dylan_4') }, 
-                { id: 'dylan_6', name: "Time Warp", icon: "⏳", desc: "Dylan hits max speed (0.1s)", cost: 5000000, type: 'special', value: 0, trigger: g => g.loc >= 6 && g.upgrades.includes('dylan_5') }, 
-                { id: 'unending_love', name: "Unending Love", icon: "❤️", desc: "Double the love! 2nd Auto-Clicker.", cost: 10000000, type: 'special', value: 0, trigger: g => g.loc >= 6, visual: "❤️" },
-
-                { id: 'blueberry', name: "Blueberry Mix", icon: "🫐", desc: "Whisks x2", cost: 2500, type: 'building_mult', bId: 0, value: 2, trigger: g => g.buildings[0] >= 10 },
-                { id: 'spoon', name: "Matcha Spoon", icon: "🥄", desc: "Click gains 5% of MPS", cost: 5000, type: 'click_percent_mps', value: 0.05, trigger: g => g.total >= 2000 },
-                { id: 'barni', name: "Barni (Artist)", icon: "👨🏼‍🎨", desc: "Barni paints! Global +20%", cost: 5000, type: 'global_mult', value: 1.2, trigger: g => g.total >= 2000, visual: "👨🏼‍🎨" },
-                { id: 'lucky', name: "Uncle Lucky", icon: "👨🏾", desc: "10% Chance for 2x Click", cost: 7777, type: 'passive', value: 0, trigger: g => g.total >= 5000 },
-                { id: 'modeling', name: "Modeling Contract", icon: "📸", desc: "Lili is famous! Lili x2", cost: 10000, type: 'building_mult', bId: 1, value: 2, trigger: g => g.buildings[1] >= 10 },
-                { id: 'vini', name: "Daily Call from Vini", icon: "👨🏻📞", desc: "Brotherly motivation! Global x1.3", cost: 15000, type: 'global_mult', value: 1.3, trigger: g => g.total >= 10000, visual: "👨🏻" },
-                { id: 'naomi', name: "Naomi's Magic Ball", icon: "🔮", desc: "Future is bright! +10% Crit Chance", cost: 25000, type: 'passive', value: 0, trigger: g => g.loc >= 3, visual: "🔮" }, 
-                { id: 'richi', name: "Richi's Sprint", icon: "🏃🏾‍♂️", desc: "Track star delivery! Fleet x2", cost: 40000, type: 'building_mult', bId: 3, value: 2, trigger: g => g.loc >= 6, visual: "🏃🏾‍♂️" }, 
-                { id: 'orsidia', name: "BFF Orsi & Dia", icon: "👯‍♀️", desc: "Besties support! Global x1.4", cost: 50000, type: 'global_mult', value: 1.4, trigger: g => g.total >= 25000, visual: "👯‍♀️" },
-                { id: 'bao', name: "Bao's Discovery", icon: "👨🏻🏅", desc: "Found the medal! Click Power x1.25", cost: 75000, type: 'click_mult', value: 1.25, trigger: g => g.total >= 40000, visual: "🏅" },
-                { id: 'adri', name: "Adri's Peace", icon: "👩🏾", desc: "Reunited Guyana & Suriname! Global x2.0", cost: 150000, type: 'global_mult', value: 2.0, trigger: g => g.loc >= 4, visual: "🕊️" }, 
-                { id: 'cat', name: "Shop Cat", icon: "🐈", desc: "Cute! Global +10%", cost: 250000, type: 'global_mult', value: 1.1, trigger: g => g.total >= 100000, visual: "🐈" },
-                { id: 'boss_woman', name: "Boss Woman", icon: "👩🏻‍💼", desc: "Hani runs an NGO now. Global x1.5", cost: 400000, type: 'global_mult', value: 1.5, trigger: g => g.buildings[6] > 0 },
-                { id: 'fertilizer', name: "Organic Fertilizer", icon: "🌱", desc: "Tea Hills x2 Production", cost: 500000, type: 'building_mult', bId: 4, value: 2, trigger: g => g.buildings[4] >= 5 },
-                { id: 'nguyen', name: "All I Do Is Nguyen", icon: "🏆", desc: "Win win win! Global x1.5", cost: 750000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
-                { id: 'trade_deal', name: "VN-JP Trade Deal", icon: "🤝", desc: "Big Business! Global +50%", cost: 1000000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 }
+                { id: 'condensed_milk', icon: "🥛", cost: 500, type: 'click_mult', value: 2, trigger: g => g.total >= 100 },
+                { id: 'dylan', icon: "👨🏾‍🦱", cost: 250, type: 'special', value: 0, trigger: g => g.total >= 100, visual: "👨🏾‍🦱" },
+                { id: 'dylan_2', icon: "💪", cost: 5000, type: 'special', value: 0, trigger: g => g.loc >= 1 && g.upgrades.includes('dylan') }, 
+                { id: 'dylan_3', icon: "🏃🏾", cost: 25000, type: 'special', value: 0, trigger: g => g.loc >= 2 && g.upgrades.includes('dylan_2') }, 
+                { id: 'dylan_4', icon: "☕", cost: 100000, type: 'special', value: 0, trigger: g => g.loc >= 3 && g.upgrades.includes('dylan_3') }, 
+                { id: 'dylan_5', icon: "🧘🏾‍♂️", cost: 500000, type: 'special', value: 0, trigger: g => g.loc >= 4 && g.upgrades.includes('dylan_4') }, 
+                { id: 'dylan_6', icon: "⏳", cost: 5000000, type: 'special', value: 0, trigger: g => g.loc >= 6 && g.upgrades.includes('dylan_5') }, 
+                { id: 'unending_love', icon: "❤️", cost: 10000000, type: 'special', value: 0, trigger: g => g.loc >= 6, visual: "❤️" },
+                { id: 'blueberry', icon: "🫐", cost: 2500, type: 'building_mult', bId: 0, value: 2, trigger: g => g.buildings[0] >= 10 },
+                { id: 'spoon', icon: "🥄", cost: 5000, type: 'click_percent_mps', value: 0.05, trigger: g => g.total >= 2000 },
+                { id: 'barni', icon: "👨🏼‍🎨", cost: 5000, type: 'global_mult', value: 1.2, trigger: g => g.total >= 2000, visual: "👨🏼‍🎨" },
+                { id: 'lucky', icon: "👨🏾", cost: 7777, type: 'passive', value: 0, trigger: g => g.total >= 5000 },
+                { id: 'modeling', icon: "📸", cost: 10000, type: 'building_mult', bId: 1, value: 2, trigger: g => g.buildings[1] >= 10 },
+                { id: 'vini', icon: "👨🏻📞", cost: 15000, type: 'global_mult', value: 1.3, trigger: g => g.total >= 10000, visual: "👨🏻" },
+                { id: 'naomi', icon: "🔮", cost: 25000, type: 'passive', value: 0, trigger: g => g.loc >= 3, visual: "🔮" }, 
+                { id: 'richi', icon: "🏃🏾‍♂️", cost: 40000, type: 'building_mult', bId: 3, value: 2, trigger: g => g.loc >= 6, visual: "🏃🏾‍♂️" }, 
+                { id: 'orsidia', icon: "👯‍♀️", cost: 50000, type: 'global_mult', value: 1.4, trigger: g => g.total >= 25000, visual: "👯‍♀️" },
+                { id: 'bao', icon: "👨🏻🏅", cost: 75000, type: 'click_mult', value: 1.25, trigger: g => g.total >= 40000, visual: "🏅" },
+                { id: 'adri', icon: "👩🏾", cost: 150000, type: 'global_mult', value: 2.0, trigger: g => g.loc >= 4, visual: "🕊️" }, 
+                { id: 'cat', icon: "🐈", cost: 250000, type: 'global_mult', value: 1.1, trigger: g => g.total >= 100000, visual: "🐈" },
+                { id: 'boss_woman', icon: "👩🏻‍💼", cost: 400000, type: 'global_mult', value: 1.5, trigger: g => g.buildings[6] > 0 },
+                { id: 'fertilizer', icon: "🌱", cost: 500000, type: 'building_mult', bId: 4, value: 2, trigger: g => g.buildings[4] >= 5 },
+                { id: 'nguyen', icon: "🏆", cost: 750000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
+                { id: 'trade_deal', icon: "🤝", cost: 1000000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 }
             ],
             news: [
-                { text: "Hani tries to put paprika in matcha. Hungarians are confused.", req: g => g.loc === 0 },
-                { text: "Breaking: Magyar now officially called 'Matchyar'.", req: g => g.loc === 0 && mps >= 100 },
-                { text: "Hani is dancing Flamenco with a whisk in hand.", req: g => g.loc === 1 },
-                { text: "Dutch news: Green tea stroopwafels are the new craze.", req: g => g.loc === 2 },
-                { text: "The Queen has been spotted sipping Hani's Special Blend.", req: g => g.loc === 3 },
-                { text: "Hani exploring the Kaieteur Falls with a cup of tea.", req: g => g.loc === 4 },
-                { text: "Adri has successfully negotiated a peace treaty using only Matcha.", req: g => g.upgrades.includes('adri') },
-                { text: "Hani says Suriname reminds her of the good vibes.", req: g => g.loc === 5 },
-                { text: "Richi wins gold medal in Matcha Delivery Olympics.", req: g => g.upgrades.includes('richi') },
-                { text: "Hani finally arrives in Vietnam! The tea is perfect.", req: g => g.loc === 7 },
-                { text: "Hanoi traffic stopped for giant tea parade.", req: g => g.loc === 7 },
-                { text: g => `Dylan has drank ${Math.floor(g.total).toLocaleString()} cups of matcha. He is vibrating.`, req: g => g.upgrades.includes('dylan') },
-                { text: "Breaking: Lili has evolved. She cloned herself to cover the night shift.", req: g => g.buildings[1] >= 25 },
-                { text: "Customers confused seeing multiple Lilis at once. 'I'm just fast', she claims.", req: g => g.buildings[1] > 2 },
-                { text: "Uncle Lucky says: 'Put it all on Green!'", req: g => g.upgrades.includes('lucky') },
-                { text: "Naomi predicts high profits today.", req: g => g.upgrades.includes('naomi') },
-                { text: "Orsi & Dia are posting 5-star reviews everywhere.", req: g => g.upgrades.includes('orsidia') },
-                { text: "Shop cat accidentally orders 5000kg of fish.", req: g => g.upgrades.includes('cat') },
-                { text: "Bao found a shiny thing. It was the lost medal!", req: g => g.upgrades.includes('bao') },
-                { text: "Hani elected president of the Matcha NGO.", req: g => g.upgrades.includes('boss_woman') },
-                { text: "Scientists say the world is 70% water, 30% matcha.", req: g => mps > 5000 },
-                { text: "Hani accidentally creates a black hole of flavor. It tastes grassy.", req: g => mps > 50000 },
-                { text: "Reality creates a save point because the matcha is too good.", req: g => mps > 200000 },
-                { text: "Aliens land, ask for 'The Green Stuff'.", req: g => mps > 1000000 },
-                { text: "EARTH IS GREEN.", req: g => g.loc === 8 },
-                { text: "Dylan's hands are shaking from matcha overload.", req: g => g.total >= 10 && g.total < 100 },
-                { text: "Dylan can see time.", req: g => g.total >= 100 && g.total < 1000 },
-                { text: "Dylan has ascended beyond the need for sleep.", req: g => g.total >= 1000 && g.total < 10000 },
-                { text: "Dylan vibrates at the frequency of the universe.", req: g => g.total >= 10000 && g.total < 100000 },
-                { text: "Dylan is no longer man, but pure energy.", req: g => g.total >= 100000 && g.total < 1000000 },
-                { text: "Dylan has become the Matcha Singularity.", req: g => g.total >= 1000000 },
-                { text: "Dylan has surpassed 10,000,000 cups. He is now a constellation.", req: g => g.total >= 10000000 },
-                { text: "Local tea shop runs out of tea, blames Hani.", req: g => true },
-                { text: "Green clouds spotted over the city.", req: g => true },
-                { text: "Hani's Matcha: It's not just tea, it's a lifestyle.", req: g => true },
-                { text: "Breaking: Coffee beans go on strike.", req: g => true },
-                { text: "Matcha is the new water.", req: g => true },
-                { text: "Local man claims he turned green after drinking too much matcha.", req: g => true },
-                { text: "Hani's cafe wins 'Greenest Place on Earth' award.", req: g => true },
-                { text: "Matcha prices soar as demand skyrockets.", req: g => true },
-                { text: "New study shows matcha improves everything.", req: g => true },
-                { text: "Hani considers painting the moon green.", req: g => g.total > 1000000 }
+                { id: 'n_start_1', req: g => g.loc === 0 },
+                { id: 'n_matchyar', req: g => g.loc === 0 && mps >= 100 },
+                { id: 'n_start_2', req: g => g.loc === 0 },
+                { id: 'n_spain_1', req: g => g.loc === 1 },
+                { id: 'n_spain_2', req: g => g.loc === 1 },
+                { id: 'n_nl_1', req: g => g.loc === 2 },
+                { id: 'n_nl_2', req: g => g.loc === 2 },
+                { id: 'n_uk_1', req: g => g.loc === 3 },
+                { id: 'n_uk_2', req: g => g.loc === 3 },
+                { id: 'n_guyana', req: g => g.loc === 4 },
+                { id: 'n_adri', req: g => g.upgrades.includes('adri') },
+                { id: 'n_suri_1', req: g => g.loc === 5 },
+                { id: 'n_suri_2', req: g => g.loc === 5 },
+                { id: 'n_richi', req: g => g.upgrades.includes('richi') },
+                { id: 'n_vn_1', req: g => g.loc === 7 },
+                { id: 'n_vn_2', req: g => g.loc === 7 },
+                { id: 'n_lili', req: g => g.buildings[1] >= 25 },
+                { id: 'n_lili_2', req: g => g.buildings[1] > 2 },
+                { id: 'n_lucky', req: g => g.upgrades.includes('lucky') },
+                { id: 'n_naomi', req: g => g.upgrades.includes('naomi') },
+                { id: 'n_orsi', req: g => g.upgrades.includes('orsidia') },
+                { id: 'n_cat', req: g => g.upgrades.includes('cat') },
+                { id: 'n_bao', req: g => g.upgrades.includes('bao') },
+                { id: 'n_boss', req: g => g.upgrades.includes('boss_woman') },
+                { id: 'n_sci', req: g => mps > 5000 },
+                { id: 'n_blackhole', req: g => mps > 50000 },
+                { id: 'n_save', req: g => mps > 200000 },
+                { id: 'n_aliens', req: g => mps > 1000000 },
+                { id: 'n_earth', req: g => g.loc === 8 },
+                { id: 'n_dylan_10', req: g => g.total >= 10 && g.total < 100 },
+                { id: 'n_dylan_100', req: g => g.total >= 100 && g.total < 1000 },
+                { id: 'n_dylan_1k', req: g => g.total >= 1000 && g.total < 10000 },
+                { id: 'n_dylan_10k', req: g => g.total >= 10000 && g.total < 100000 },
+                { id: 'n_dylan_100k', req: g => g.total >= 100000 && g.total < 1000000 },
+                { id: 'n_dylan_1m', req: g => g.total >= 1000000 },
+                { id: 'n_dylan_10m', req: g => g.total >= 10000000 },
+                { id: 'n_gen_1', req: g => true },
+                { id: 'n_gen_2', req: g => true },
+                { id: 'n_gen_3', req: g => true },
+                { id: 'n_gen_4', req: g => true },
+                { id: 'n_gen_5', req: g => true },
+                // Dynamic Dylan News special handling in spawn
+                { id: 'n_dylan', req: g => g.upgrades.includes('dylan') }
             ]
         };
 
@@ -1051,7 +932,7 @@
             container.appendChild(el);
             
             let speedMult = 1;
-            if (type === 'upgrade' && id === 'richi') speedMultiplier = 3;
+            if (type === 'upgrade' && id === 'richi') speedMult = 3;
 
             return {
                 x: Math.random() * 90,
@@ -1123,7 +1004,7 @@
 
                 const tip = document.createElement('div');
                 tip.className = 'map-tooltip';
-                tip.innerText = `${loc.flag} ${loc.name}`;
+                tip.innerText = `${loc.flag} ${getText('loc_'+index)}`;
                 pin.appendChild(tip);
 
                 container.appendChild(pin);
@@ -1182,18 +1063,19 @@
             if (availableNews.length === 0) return;
             
             let pool = availableNews.filter(n => {
-                const t = typeof n.text === 'function' ? n.text(state) : n.text;
+                const t = getText(n.id);
+                if(n.id === 'n_dylan') return !recentNews.includes(n.id);
                 return !recentNews.includes(t);
             });
             
             if (pool.length === 0) pool = availableNews;
-            
-            // If pool is still just 1 item and it's in recent, we have to show it.
-            // To improve variety, we can force pick from full available list if pool is small.
-            // But filtering last 5 should be fine with enough content.
-            
+
             const rand = pool[Math.floor(Math.random() * pool.length)];
-            const text = typeof rand.text === 'function' ? rand.text(state) : rand.text;
+            let text = getText(rand.id);
+            
+            if(rand.id === 'n_dylan') {
+                text = text.replace('{n}', Math.floor(state.total).toLocaleString());
+            }
             
             recentNews.push(text);
             if(recentNews.length > 5) recentNews.shift();
@@ -1216,30 +1098,35 @@
                 div.id = `build-${i}`;
                 div.onclick = () => buyBuilding(i);
                 
+                // Helper to get translated name/desc
+                const getNameDesc = (count) => {
+                    let n = getText(`b${i}_n`);
+                    let d = getText(`b${i}_d`);
+                    let s = b.symbol;
+                    if(count >= 50) {
+                        n = getText(`b${i}_n_t3`) || n;
+                        d = getText(`b${i}_d_t3`) || d;
+                        s = b.evolved2.symbol;
+                        d += " (x4!)";
+                    } else if(count >= 25) {
+                        n = getText(`b${i}_n_t2`) || n;
+                        d = getText(`b${i}_d_t2`) || d;
+                        s = b.evolved.symbol;
+                        d += " (x2!)";
+                    }
+                    if(count >= 100) d += " (x10000!)";
+                    return {n, d, s};
+                };
+
                 div.onmouseenter = () => {
                     const count = state.buildings[i];
-                    let name = b.name;
-                    let desc = b.desc;
-                    let sym = b.symbol;
-                    
-                    if (count >= 50) {
-                        name = b.evolved2.name;
-                        desc = b.evolved2.desc + " (4x Output!)";
-                        sym = b.evolved2.symbol;
-                    } else if (count >= 25) {
-                        name = b.evolved.name;
-                        desc = b.evolved.desc + " (2x Output!)";
-                        sym = b.evolved.symbol;
-                    }
-                    
-                    if (count >= 100) desc += " (x10000 Overcharge!)";
-
-                    showInfo(sym, name, desc, `Cost: ${Math.floor(b.baseCost * Math.pow(1.15, count)).toLocaleString()}`);
+                    const info = getNameDesc(count);
+                    showInfo(info.s, info.n, info.d, `Cost: ${Math.floor(b.baseCost * Math.pow(1.15, count)).toLocaleString()}`);
                 };
                 div.onmouseleave = clearInfo;
                 div.innerHTML = `
                     <div class="item-icon" id="icon-${i}">${b.symbol}</div>
-                    <div class="item-details"><h3 id="name-${i}">${b.name}</h3></div>
+                    <div class="item-details"><h3 id="name-${i}"></h3></div>
                     <div class="item-right">
                         <div class="item-cost" id="cost-${i}">0</div>
                         <div class="item-count" id="count-${i}">0</div>
@@ -1257,7 +1144,7 @@
                 div.style.display = 'none';
                 div.innerHTML = `${u.icon}`;
                 div.onclick = () => buyUpgrade(u.id);
-                div.onmouseenter = () => showInfo(u.icon, u.name, u.desc, `Cost: ${u.cost.toLocaleString()}`);
+                div.onmouseenter = () => showInfo(u.icon, getText(`u_${u.id}`), getText(`u_${u.id}_d`), `Cost: ${u.cost.toLocaleString()}`);
                 div.onmouseleave = clearInfo;
                 uContainer.appendChild(div);
             });
@@ -1286,8 +1173,8 @@
 
         function clearInfo() {
             document.getElementById('info-icon-container').innerText = "?";
-            document.getElementById('info-title').innerText = "Info Panel";
-            document.getElementById('info-desc').innerText = "Hover over items to see details.";
+            document.getElementById('info-title').innerText = getText('welcome');
+            document.getElementById('info-desc').innerText = getText('hover_info');
             document.getElementById('info-cost').innerText = "";
         }
 
@@ -1295,7 +1182,7 @@
             const list = document.getElementById('passives-list');
             list.innerHTML = '';
             if(state.upgrades.length === 0) {
-                list.innerHTML = '<div style="color:#999; font-style:italic;">No active passives yet.</div>';
+                list.innerHTML = '<div style="color:#999; font-style:italic;">...</div>';
                 return;
             }
             state.upgrades.forEach(uid => {
@@ -1303,36 +1190,30 @@
                 if(u) {
                     const div = document.createElement('div');
                     div.className = 'passive-row';
-                    div.innerHTML = `<span style="font-size:1.5rem; margin-right:10px;">${u.icon}</span> <strong>${u.name}</strong>: ${u.desc}`;
+                    div.innerHTML = `<span style="font-size:1.5rem; margin-right:10px;">${u.icon}</span> <strong>${getText(`u_${u.id}`)}</strong>`;
                     list.appendChild(div);
                 }
             });
             const loc = CONFIG.locations[state.loc];
-            document.getElementById('passport-loc').innerText = `${loc.name} ${loc.flag}`;
-            document.getElementById('passport-mult').innerText = `Global Multiplier: x${loc.multiplier}`;
+            document.getElementById('passport-loc').innerText = `${getText('loc_'+state.loc)} ${loc.flag}`;
+            document.getElementById('passport-mult').innerText = `Mult: x${loc.multiplier}`;
         }
 
         function updateStatsContent() {
             const container = document.getElementById('stats-content');
-            let bHtml = '<table class="stats-table"><tr><th>Building</th><th>Owned</th><th>Total Generated</th></tr>';
+            let bHtml = '<table class="stats-table"><tr><th>Building</th><th>Owned</th><th>Total</th></tr>';
             CONFIG.buildings.forEach((b, i) => {
                 if(state.buildings[i] > 0) {
-                    let name = b.name;
-                    if (state.buildings[i] >= 50) name = b.evolved2.name;
-                    else if (state.buildings[i] >= 25) name = b.evolved.name;
-                    
+                    let n = getText(`b${i}_n`);
+                    if(state.buildings[i]>=50) n = getText(`b${i}_n_t3`) || n;
+                    else if(state.buildings[i]>=25) n = getText(`b${i}_n_t2`) || n;
+
                     const val = Math.floor(state.buildingProduction[i]).toLocaleString();
-                    bHtml += `<tr><td>${name}</td><td>${state.buildings[i]}</td><td>${val}</td></tr>`;
+                    bHtml += `<tr><td>${n}</td><td>${state.buildings[i]}</td><td>${val}</td></tr>`;
                 }
             });
             bHtml += '</table>';
-            let uHtml = '<div style="text-align:left;">';
-            state.upgrades.forEach(uid => {
-                const u = CONFIG.upgrades.find(x => x.id === uid);
-                uHtml += `<span style="margin-right:10px; font-size:1.5rem;" title="${u.name}">${u.icon}</span>`;
-            });
-            uHtml += '</div>';
-            container.innerHTML = `<p><strong>Total Matcha Produced:</strong> ${Math.floor(state.total).toLocaleString()}</p><p><strong>Current MPS:</strong> ${mps.toFixed(1)}</p><hr><h3>Building Output</h3>${bHtml}<h3>Collection</h3>${uHtml}`;
+            container.innerHTML = `<p><strong>Total:</strong> ${Math.floor(state.total).toLocaleString()}</p><p><strong>MPS:</strong> ${mps.toFixed(1)}</p><hr>${bHtml}`;
         }
 
         /* --- GAME LOGIC --- */
@@ -1344,11 +1225,9 @@
         function doClick(auto = false, source = 'user') {
             let amount = clickPower;
             let isCrit = false;
-            
             let critChance = 0;
             if(state.upgrades.includes('lucky')) critChance += 0.1;
             if(state.upgrades.includes('naomi')) critChance += 0.1;
-            
             if(Math.random() < critChance) { amount *= 2; isCrit = true; }
             
             addRes(amount);
@@ -1358,20 +1237,14 @@
             if(!auto) {
                 clickHistory.push(Date.now());
                 sfxClick();
-                // Manual visual
                 const rect = btn.getBoundingClientRect();
                 const containerRect = document.getElementById('click-btn-container').getBoundingClientRect();
-                
                 const x = (rect.left - containerRect.left) + Math.random() * rect.width;
                 const y = (rect.top - containerRect.top) + Math.random() * rect.height;
-                
                 spawnFloat(amount, isCrit, x, y);
             } else {
-                // Auto click effect
                 btn.classList.add('bump');
                 setTimeout(() => btn.classList.remove('bump'), 150);
-                
-                // Animate Orbiter Lunge
                 if(source === 'dylan') {
                     const el = document.getElementById('dylan-sprite');
                     if(el) { el.classList.add('hitting'); setTimeout(() => el.classList.remove('hitting'), 150); }
@@ -1379,8 +1252,6 @@
                     const el = document.getElementById('heart-sprite');
                     if(el) { el.classList.add('hitting'); setTimeout(() => el.classList.remove('hitting'), 150); }
                 }
-
-                // Spawn float at center
                 const btnContainer = document.getElementById('click-btn-container');
                 spawnFloat(amount, isCrit, btnContainer.offsetWidth/2, btnContainer.offsetHeight/2 - 20);
             }
@@ -1404,14 +1275,12 @@
                 state.res -= cost;
                 state.buildings[id]++;
                 sfxBuy();
-                
-                // Evolution Check
+                // Evolution Newspaper
                 if(state.buildings[id] === 25) {
-                    showNewspaper(CONFIG.buildings[id].evolved.name, `Your ${CONFIG.buildings[id].name}s have Evolved! 2x Production!`);
+                    showNewspaper(getText(`b${id}_n_t2`), getText('loc_new') + " Evolution!"); // simplified
                 } else if(state.buildings[id] === 50) {
-                    showNewspaper(CONFIG.buildings[id].evolved2.name, `TIER 3 REACHED! Your production has quadrupled!`);
+                    showNewspaper(getText(`b${id}_n_t3`), "TIER 3 REACHED!");
                 }
-
                 recalc(); updateUI(); syncCafeSprites();
             }
         }
@@ -1422,7 +1291,7 @@
                 state.res -= u.cost;
                 state.upgrades.push(id);
                 sfxBuy();
-                recalc(); updateUI(); syncCafeSprites(); // Add sprites if upgrade has visual
+                recalc(); updateUI(); syncCafeSprites();
             }
         }
 
@@ -1460,24 +1329,15 @@
                 const cost = Math.floor(b.baseCost * Math.pow(1.15, count));
                 const el = document.getElementById(`build-${i}`);
                 
-                let name = b.name;
-                let sym = b.symbol;
-                
-                if (count >= 50) {
-                    name = b.evolved2.name;
-                    sym = b.evolved2.symbol;
-                } else if (count >= 25) {
-                    name = b.evolved.name;
-                    sym = b.evolved.symbol;
-                }
+                let n = getText(`b${i}_n`);
+                let s = b.symbol;
+                if(count>=50) { n=getText(`b${i}_n_t3`) || n; s=b.evolved2.symbol; }
+                else if(count>=25) { n=getText(`b${i}_n_t2`) || n; s=b.evolved.symbol; }
 
-                document.getElementById(`name-${i}`).innerText = name;
-                document.getElementById(`icon-${i}`).innerText = sym;
+                document.getElementById(`name-${i}`).innerText = n;
+                document.getElementById(`icon-${i}`).innerText = s;
                 document.getElementById(`cost-${i}`).innerText = cost.toLocaleString();
                 document.getElementById(`count-${i}`).innerText = count;
-                
-                // Keep tooltip fresh
-                if(el.matches(':hover')) el.onmouseenter();
 
                 if(state.res >= cost) el.classList.remove('disabled'); else el.classList.add('disabled');
             });
@@ -1487,17 +1347,17 @@
                 else if(u.trigger(state)) { el.style.display = 'flex'; if(state.res >= u.cost) el.classList.remove('disabled'); else el.classList.add('disabled'); }
             });
             
-            // Progress Bar Update
             const nextLoc = CONFIG.locations[state.loc + 1];
             const goalText = document.getElementById('goal-text');
             const bar = document.getElementById('goal-progress');
+            const goalLabel = getText('goal_prefix');
             
             if (nextLoc) {
-                goalText.innerText = `NEXT: ${nextLoc.name} (${nextLoc.threshold.toLocaleString()} MPS)`;
+                goalText.innerText = `${goalLabel} ${getText('loc_'+(state.loc+1))} (${nextLoc.threshold.toLocaleString()})`;
                 const pct = Math.min(100, (mps / nextLoc.threshold) * 100);
                 bar.style.width = `${pct}%`;
             } else {
-                goalText.innerText = "GLOBAL DOMINATION!";
+                goalText.innerText = getText('goal_global');
                 bar.style.width = "100%";
             }
         }
@@ -1508,24 +1368,20 @@
             const uiActive = clickHistory.length * clickPower;
             document.getElementById('rps-display').innerText = `${(mps + uiActive).toFixed(1)} / SEC`;
             const el = document.getElementById('active-rps');
-            el.innerText = uiActive > 0 ? `(Passive: ${mps.toFixed(1)} | Active: +${uiActive.toFixed(1)})` : "";
+            el.innerText = uiActive > 0 ? `(+${uiActive.toFixed(1)})` : "";
         }
 
         function checkLocationUnlock() {
             const nextLocIdx = state.loc + 1;
             if(nextLocIdx < CONFIG.locations.length && mps >= CONFIG.locations[nextLocIdx].threshold) {
-                // Determine previous location name for the story
                 const prevLocName = CONFIG.locations[state.loc].name;
-                
                 state.loc = nextLocIdx;
                 applyLocationTheme();
                 recalc();
                 startMusic(); 
-                
-                // NEWSPAPER POPUP
                 showNewspaper(
-                    `HELLO ${CONFIG.locations[nextLocIdx].name.toUpperCase()}!`, 
-                    `The people of ${prevLocName} have succumbed to Matcha Madness! Hani has expanded her empire!`
+                    getText('loc_new'), 
+                    `${getText('loc_arrived')} ${getText('loc_'+nextLocIdx)}!`
                 );
             }
         }
@@ -1533,6 +1389,8 @@
         function applyLocationTheme() {
             const loc = CONFIG.locations[state.loc];
             const r = document.documentElement.style;
+            const snow = document.querySelectorAll('.snowflake');
+            if (state.loc === 0) { if (snow.length === 0) createSnow(); } else { snow.forEach(s => s.remove()); }
             r.setProperty('--bg-color', loc.colors.bg);
             r.setProperty('--bg-pattern', loc.colors.pat);
             r.setProperty('--primary', loc.colors.pri);
@@ -1540,11 +1398,28 @@
             r.setProperty('--text-color', loc.colors.txt || '#212121');
         }
 
-        function startGame() { document.getElementById('intro-overlay').style.display = 'none'; initAudio(); }
+        function createSnow() {
+            for(let i=0; i<50; i++) {
+                const s = document.createElement('div');
+                s.className = 'snowflake';
+                s.innerText = '❄';
+                s.style.left = Math.random() * 100 + 'vw';
+                s.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                s.style.fontSize = (Math.random() * 10 + 10) + 'px';
+                s.style.opacity = Math.random();
+                document.body.appendChild(s);
+            }
+        }
+
+        function startGame() { 
+            document.getElementById('tutorial-overlay').style.display = 'none'; 
+            initAudio(); 
+        }
+        
         function closeLocPopup() { document.getElementById('location-popup').style.display = 'none'; }
         function save() { localStorage.setItem('haniVibrantSave', JSON.stringify(state)); }
         function load() { const d = localStorage.getItem('haniVibrantSave'); if(d) { const saved = JSON.parse(d); state = {...state, ...saved}; } }
-        function resetGame() { if(confirm("Reset?")) { localStorage.removeItem('haniVibrantSave'); location.reload(); } }
+        function resetGame() { localStorage.removeItem('haniVibrantSave'); location.reload(); }
 
         function initAudio() { if(!audioCtx) { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); startMusic(); } else if(audioCtx.state==='suspended') audioCtx.resume(); }
         function playTone(freq,type,dur,vol) { if(isMuted||!audioCtx)return; const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+dur);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur); }
