@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hani's World Tour Matcha Café</title>
+    <!-- Pixel Font -->
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* DYNAMIC PALETTE (Default: Hungary) */
+            --bg-color: #CD2A3E;      /* Hungary Red */
+            --bg-pattern: #436F4D;    /* Hungary Green */
+            --panel-bg: #ffffff;      /* White */
+            --primary: #436F4D;       /* Green */
+            --accent: #CD2A3E;        /* Red */
+            --text-color: #212121;    /* Default Text */
+            --border-color: #000000;
+            --news-bg: #212121;       
+            
+            --border-width: 4px;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            background-image: 
+                linear-gradient(45deg, var(--bg-pattern) 25%, transparent 25%, transparent 75%, var(--bg-pattern) 75%, var(--bg-pattern)), 
+                linear-gradient(45deg, var(--bg-pattern) 25%, transparent 25%, transparent 75%, var(--bg-pattern) 75%, var(--bg-pattern));
+            background-size: 40px 40px;
+            background-position: 0 0, 20px 20px;
+            color: var(--text-color);
+            font-family: 'VT323', monospace;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+            display: flex;
+            flex-direction: column; 
+            transition: background-color 1s ease;
+        }
+
+        /* --- OVERLAYS --- */
+        #intro-overlay, #location-popup, #stats-overlay, #menu-overlay, #map-overlay, #newspaper-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #location-popup, #stats-overlay, #menu-overlay, #map-overlay, #newspaper-overlay { display: none; }
+
+        .modal-box {
+            background: var(--panel-bg);
+            border: 6px solid var(--primary);
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 0 0 1000px rgba(0,0,0,0.5);
+            position: relative;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: #212121;
+        }
+
+        .modal-box h1, .modal-box h2 {
+            color: var(--accent);
+            font-size: 3.5rem;
+            margin: 0 0 20px 0;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 0px #fff;
+        }
+
+        .modal-box p { font-size: 1.5rem; line-height: 1.4; margin-bottom: 30px; }
+
+        /* Generic Button Style */
+        .pixel-btn {
+            background: var(--bg-color);
+            color: white;
+            border: 4px solid black;
+            font-family: 'VT323', monospace;
+            font-size: 2rem;
+            padding: 10px 30px;
+            cursor: pointer;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+            text-shadow: 1px 1px 0 #000;
+            margin: 10px;
+        }
+        .pixel-btn:hover { transform: scale(1.05); }
+        .pixel-btn:active { transform: scale(0.95); box-shadow: 2px 2px 0px rgba(0,0,0,0.5); }
+
+        .pixel-btn.small {
+            font-size: 1.2rem;
+            padding: 5px 15px;
+            box-shadow: 3px 3px 0px rgba(0,0,0,0.5);
+        }
+
+        /* --- NEWSPAPER POPUP --- */
+        .newspaper {
+            background: #fdf6e3;
+            border: 4px solid #212121;
+            padding: 20px;
+            max-width: 500px;
+            color: #212121;
+            text-align: center;
+            box-shadow: 10px 10px 0px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        .news-header {
+            border-bottom: 4px double #212121;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .news-logo {
+            font-size: 4rem;
+            font-weight: bold;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+        }
+        .news-sub { font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; }
+        .news-headline { font-size: 2.5rem; margin: 20px 0; font-weight: bold; line-height: 1; }
+        .news-body { font-size: 1.5rem; margin-bottom: 20px; }
+        .news-close {
+            position: absolute; top: -15px; right: -15px;
+            background: red; color: white; border: 2px solid black;
+            width: 40px; height: 40px; font-size: 2rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* --- LAYOUT --- */
+        #game-container {
+            display: flex;
+            flex: 1; 
+            padding: 20px;
+            box-sizing: border-box;
+            gap: 20px;
+            overflow: hidden;
+            height: 100%;
+        }
+
+        /* LEFT PANEL */
+        .left-panel {
+            flex: 1;
+            background: var(--panel-bg);
+            border: var(--border-width) solid var(--border-color);
+            box-shadow: 10px 10px 0px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #212121;
+            position: relative;
+        }
+
+        #menu-btn { position: absolute; top: 10px; left: 10px; z-index: 100; }
+
+        .resource-display {
+            text-align: center;
+            margin-bottom: 30px;
+            background: #fff;
+            padding: 10px 30px;
+            border: 3px solid black;
+            box-shadow: 5px 5px 0px #888;
+            width: 80%;
+        }
+
+        #resource-count {
+            font-size: 4.5rem;
+            font-weight: bold;
+            color: var(--primary);
+            line-height: 1;
+            text-shadow: 2px 2px 0px #000;
+        }
+
+        #rps-display { font-size: 1.8rem; color: var(--accent); text-transform: uppercase; }
+        #active-rps { font-size: 1.2rem; color: #555; min-height: 1.5em; }
+
+        #click-btn-container {
+            position: relative;
+            width: 300px; height: 300px;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        #click-btn {
+            width: 200px; height: 200px;
+            background-color: var(--primary);
+            border: 6px solid var(--border-color);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 6rem;
+            cursor: pointer;
+            box-shadow: 0px 8px 0px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 10;
+            transition: transform 0.05s;
+        }
+        #click-btn:active, #click-btn.bump { transform: scale(0.95); box-shadow: none; }
+        #click-btn::after { content: "🍵"; filter: drop-shadow(4px 4px 0px rgba(0,0,0,0.5)); }
+
+        /* Floating Orbit Wrappers */
+        .orbit-wrapper {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            pointer-events: none;
+            display: none; 
+        }
+        
+        /* Dylan & Heart are handled via JS for position, no CSS rotate */
+        .orbiter-sprite {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4rem;
+            transition: margin-top 0.1s;
+        }
+        
+        /* Adjusted Margins for Closer Float */
+        #dylan-sprite { margin-top: -90px; } /* Closer */
+        #heart-sprite { margin-top: -120px; font-size: 3rem; }
+
+        /* Lunge Animation Classes */
+        #dylan-sprite.hitting { margin-top: -50px; } 
+        #heart-sprite.hitting { margin-top: -50px; }
+
+        /* PROGRESS BAR */
+        .progress-container {
+            width: 100%;
+            height: 24px;
+            background-color: #ddd;
+            border: 3px solid black;
+            margin-top: 10px;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary);
+            width: 0%;
+            transition: width 0.5s;
+        }
+
+        /* RIGHT PANEL */
+        .right-panel {
+            flex: 1.5;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+            gap: 0;
+            box-shadow: 10px 10px 0px rgba(0,0,0,0.5);
+            border: var(--border-width) solid var(--border-color);
+            background: var(--panel-bg);
+            color: #212121;
+        }
+
+        /* 1. TOP: CAFE SCENE */
+        #cafe-scene {
+            height: 200px;
+            flex-shrink: 0;
+            background-color: #aed581;
+            border-bottom: var(--border-width) solid var(--border-color);
+            position: relative;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .scene-label {
+            position: absolute; top: 5px; left: 10px;
+            background: black; color: white;
+            padding: 2px 8px; font-size: 1.2rem;
+            z-index: 5; cursor: pointer;
+            transition: 0.1s;
+            border: 2px solid white;
+        }
+        .scene-label:hover { background: var(--accent); transform: scale(1.05); }
+
+        #sprite-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        /* Bouncing Sprites in Cafe */
+        .bouncing-sprite {
+            position: absolute;
+            font-size: 2.5rem;
+            will-change: transform;
+            line-height: 1;
+            user-select: none;
+        }
+
+        /* 2. MIDDLE: INFO PANEL */
+        #info-panel {
+            height: 100px;
+            flex-shrink: 0;
+            background: #fff;
+            border-bottom: var(--border-width) solid var(--border-color);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center; 
+            gap: 20px;
+        }
+        #info-icon-container {
+            width: 70px; height: 70px;
+            background: #eee;
+            border: 3px solid #ccc;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 3rem;
+        }
+        #info-text { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        #info-title { margin: 0; font-size: 1.5rem; color: var(--accent); text-transform: uppercase; }
+        #info-desc { margin: 0; font-size: 1.2rem; color: #333; }
+        #info-cost { font-weight: bold; color: var(--primary); }
+
+        /* 3. TABS HEADER */
+        .tabs-header {
+            display: flex;
+            height: 50px;
+            flex-shrink: 0;
+            background: #ddd;
+            border-bottom: var(--border-width) solid var(--border-color);
+        }
+        .tab-btn {
+            flex: 1;
+            border: none;
+            background: #ccc;
+            font-family: inherit;
+            font-size: 1.5rem;
+            cursor: pointer;
+            border-right: 2px solid var(--border-color);
+        }
+        .tab-btn:last-child { border-right: none; }
+        .tab-btn.active {
+            background: var(--panel-bg);
+            font-weight: bold;
+            color: var(--accent);
+            border-bottom: none;
+        }
+        .tab-btn:hover:not(.active) { background: #bbb; }
+
+        /* 4. BOTTOM: SCROLLABLE CONTENT */
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: none;
+        }
+        .tab-content.active { display: block; }
+
+        /* ITEMS STYLING */
+        .shop-item {
+            background: white;
+            border: 3px solid black;
+            margin-bottom: 10px;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .shop-item:hover { background: #eee; transform: scale(1.01); }
+        .shop-item.disabled { background: #e0e0e0; opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
+        
+        .item-icon { font-size: 2rem; width: 50px; text-align: center; }
+        .item-details { flex: 1; }
+        .item-details h3 { margin: 0; font-size: 1.3rem; }
+        .item-right { text-align: right; }
+        .item-cost { font-weight: bold; color: var(--accent); }
+        .item-count { background: black; color: white; padding: 0 5px; border-radius: 4px; }
+
+        /* UPGRADES GRID STYLE */
+        .upgrades-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+        }
+        .upgrade-card {
+            height: 60px;
+            background: var(--accent);
+            border: 3px solid black;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem; color: white;
+            cursor: pointer;
+        }
+        .upgrade-card:hover { transform: translateY(-3px); }
+        .upgrade-card.disabled { background: #777; cursor: not-allowed; }
+
+        /* PASSIVES LIST STYLE */
+        .passive-row {
+            border-bottom: 1px dashed #ccc;
+            padding: 5px 0;
+            display: flex; align-items: center;
+            font-size: 1.1rem;
+        }
+
+        /* STATS TABLE */
+        .stats-table { width: 100%; text-align: left; margin-bottom: 20px; font-size: 1.2rem; border-collapse: collapse; }
+        .stats-table td, .stats-table th { border-bottom: 1px solid #ccc; padding: 5px; }
+
+        /* MAP VISUALS (Pixel Art Style CSS) */
+        .pixel-map {
+            width: 700px;
+            height: 350px;
+            background-color: #2196f3;
+            position: relative;
+            border: 4px solid black;
+            margin: 0 auto;
+            overflow: hidden;
+            /* Grid Effect */
+            background-image: 
+                linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        /* Pixelated Continents (Rectilinear Polygons) - STAIR STEP STYLE */
+        .continent {
+            position: absolute;
+            background: #4caf50;
+            border: 4px solid #1b5e20;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.3);
+        }
+        
+        /* Americas: Blocky stair shape */
+        .c-americas { 
+            width: 140px; height: 280px; top: 20px; left: 80px; 
+            clip-path: polygon(
+                20% 0%, 80% 0%, 80% 20%, 100% 20%, 100% 40%, 60% 40%, 60% 50%, 80% 50%, 80% 90%, 60% 90%, 60% 100%, 20% 100%, 20% 60%, 0% 60%, 0% 40%, 20% 40%, 20% 0%
+            ); 
+        }
+        /* Europe/Africa: Blocky */
+        .c-eur-afr { 
+            width: 160px; height: 240px; top: 30px; left: 300px; 
+            clip-path: polygon(
+                20% 0%, 80% 0%, 80% 20%, 100% 20%, 100% 50%, 80% 50%, 80% 80%, 50% 80%, 50% 100%, 20% 100%, 20% 70%, 0% 70%, 0% 40%, 20% 40%, 20% 0%
+            ); 
+        }
+        /* Asia: Blocky */
+        .c-asia { 
+            width: 200px; height: 180px; top: 30px; left: 470px; 
+            clip-path: polygon(
+                0% 0%, 80% 0%, 80% 40%, 100% 40%, 100% 80%, 60% 80%, 60% 100%, 20% 100%, 20% 60%, 0% 60%, 0% 0%
+            ); 
+        }
+        /* SE Asia / Australia Block */
+        .c-se-asia { 
+            width: 80px; height: 80px; top: 200px; left: 580px; 
+            clip-path: polygon(0% 0%, 60% 0%, 60% 40%, 100% 40%, 100% 100%, 40% 100%, 40% 60%, 0% 60%, 0% 0%); 
+            background: #66bb6a; 
+        }
+
+        .map-pin {
+            position: absolute;
+            width: 16px; height: 16px;
+            background: red;
+            border: 2px solid white;
+            border-radius: 0; /* Square for pixel look */
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            z-index: 10;
+            box-shadow: 2px 2px 0px black;
+        }
+        
+        .map-pin.active {
+            background: #FFD700;
+            width: 24px; height: 24px;
+            z-index: 20;
+            animation: pulse 1s infinite;
+        }
+        
+        .map-pin.locked {
+            background: #555;
+            border-color: #999;
+        }
+
+        .map-tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 5px 10px;
+            font-size: 1.2rem;
+            white-space: nowrap;
+            pointer-events: none;
+            display: none;
+            z-index: 30;
+            top: -40px; left: 50%; transform: translateX(-50%);
+            border: 2px solid white;
+        }
+        
+        .map-pin:hover .map-tooltip { display: block; }
+
+        /* ANIMATIONS */
+        .floater {
+            position: absolute; font-size: 2rem; color: var(--accent); pointer-events: none;
+            text-shadow: 2px 2px 0px white;
+            animation: floatUp 0.8s ease-out forwards; z-index: 100;
+        }
+        .floater.crit {
+            font-size: 3.5rem; color: gold; text-shadow: 3px 3px 0px black; z-index: 101;
+        }
+        /* Dylan Bump */
+        .bump-anim { animation: bumpAnim 0.15s ease-in-out; }
+        @keyframes bumpAnim { 0% { transform: scale(1); } 50% { transform: scale(0.9); } 100% { transform: scale(1); } }
+        @keyframes pulse { 0% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.2); } 100% { transform: translate(-50%, -50%) scale(1); } }
+        @keyframes floatUp { 0%{transform:translateY(0);opacity:1;} 100%{transform:translateY(-100px);opacity:0;} }
+
+        /* NEWS BAR - CONTINUOUS FLOW */
+        #news-bar {
+            background: var(--news-bg); color: white; border-top: 4px solid black; height: 40px;
+            display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex-shrink: 0;
+            position: relative;
+            cursor: grab;
+        }
+        #news-bar:active { cursor: grabbing; }
+        #news-label { background: var(--accent); padding: 0 15px; height: 100%; display: flex; align-items: center; font-weight: bold; font-size: 1.4rem; z-index: 10; position: absolute; left: 0; top: 0; }
+        #news-track {
+            display: flex;
+            position: absolute;
+            left: 100px; /* Offset for label */
+            height: 100%;
+            align-items: center;
+        }
+        .news-item {
+            font-size: 1.4rem;
+            padding-right: 50px;
+            white-space: nowrap;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- INTRO -->
+    <div id="intro-overlay">
+        <div class="modal-box">
+            <h1>Hani's Matcha Story</h1>
+            <p>
+                Hani loved matcha. But the matcha in her city was... sad. Watery. Green dust.
+                <br><br>
+                One day, she grabbed her <strong>Ancestors' Legendary Whisk</strong> and made a vow:
+                <br>
+                <strong style="color:var(--accent); font-size:1.8rem;">"I will show the world what REAL matcha tastes like."</strong>
+                <br><br>
+                From a humble cart to a global empire. It starts with one whisk.
+            </p>
+            <button class="pixel-btn" onclick="startGame()">START</button>
+        </div>
+    </div>
+
+    <!-- MENU OVERLAY -->
+    <div id="menu-overlay">
+        <div class="modal-box">
+            <h1>MENU</h1>
+            <button class="pixel-btn" id="mute-btn-menu" onclick="toggleAudio()">🔊 SOUND ON</button>
+            <br>
+            <button class="pixel-btn" onclick="toggleMap()">🗺️ VIEW MAP</button>
+            <br>
+            <button class="pixel-btn" onclick="toggleStats()">📊 STATISTICS</button>
+            <hr>
+            <button class="pixel-btn" style="background:#555;" onclick="toggleMenu()">RESUME</button>
+            <br><br>
+            <button class="pixel-btn small" style="background:red;" onclick="resetGame()">RESET SAVE</button>
+        </div>
+    </div>
+
+    <!-- MAP OVERLAY -->
+    <div id="map-overlay">
+        <div class="modal-box" style="width: 800px; max-width: 95%;">
+            <h1>WORLD TOUR MAP</h1>
+            <div class="pixel-map" id="map-container">
+                <!-- Continents -->
+                <div class="continent c-americas"></div>
+                <div class="continent c-eur-afr"></div>
+                <div class="continent c-asia"></div>
+                <div class="continent c-se-asia"></div>
+                <!-- Pins Generated by JS -->
+            </div>
+            <br>
+            <button class="pixel-btn" onclick="toggleMap()">CLOSE MAP</button>
+        </div>
+    </div>
+
+    <!-- NEWSPAPER OVERLAY (KLDRNEWS2) -->
+    <div id="newspaper-overlay">
+        <div class="newspaper">
+            <div class="news-close" onclick="closeNewspaper()">X</div>
+            <div class="news-header">
+                <div class="news-logo">KLDRNEWS2</div>
+                <div class="news-sub">THE MATCHA CHRONICLES</div>
+            </div>
+            <div class="news-headline" id="np-headline">EXTRA! EXTRA!</div>
+            <div class="news-body" id="np-body">Something happened!</div>
+            <button class="pixel-btn small" onclick="closeNewspaper()">READ MORE</button>
+        </div>
+    </div>
+
+    <!-- STATS OVERLAY -->
+    <div id="stats-overlay">
+        <div class="modal-box">
+            <h2>Café Statistics</h2>
+            <div id="stats-content">
+                <!-- Injected via JS -->
+            </div>
+            <button class="pixel-btn" onclick="toggleStats()">CLOSE</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        
+        <!-- LEFT PANEL -->
+        <div class="left-panel">
+            <button class="pixel-btn small" id="menu-btn" onclick="toggleMenu()">MENU</button>
+
+            <div class="resource-display">
+                <div id="resource-count">0</div>
+                <div>MATCHAS</div>
+                <div id="rps-display">0 / SEC</div>
+                <div id="active-rps"></div>
+            </div>
+            
+            <div id="click-btn-container">
+                <div id="click-btn"></div>
+                <!-- Orbiting Helpers -->
+                <div id="dylan-orbit-wrapper" class="orbit-wrapper">
+                    <div id="dylan-sprite" class="orbiter-sprite">👨🏾‍🦱</div>
+                </div>
+                <div id="heart-orbit-wrapper" class="orbit-wrapper">
+                    <div id="heart-sprite" class="orbiter-sprite">❤️</div>
+                </div>
+            </div>
+            
+            <div style="margin-top: auto; text-align: center; color: var(--text-color); width: 100%;">
+                <p style="font-size: 1.2rem; margin: 0;" id="goal-text">NEXT GOAL: Unlock Spain</p>
+                <div class="progress-container">
+                    <div class="progress-fill" id="goal-progress"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="right-panel">
+            
+            <!-- 1. CAFE SCENE -->
+            <div id="cafe-scene">
+                <div class="scene-label" onclick="toggleStats()">HANI'S CAFÉ FLOOR (STATS)</div>
+                <!-- Ensure container exists -->
+                <div id="sprite-container"></div>
+            </div>
+
+            <!-- 2. INFO PANEL -->
+            <div id="info-panel">
+                <div id="info-icon-container">?</div>
+                <div id="info-text">
+                    <h3 id="info-title">Welcome</h3>
+                    <p id="info-desc">Hover over items to see details.</p>
+                    <div id="info-cost"></div>
+                </div>
+            </div>
+
+            <!-- 3. TABS -->
+            <div class="tabs-header">
+                <button class="tab-btn active" onclick="switchTab('buildings')">Buildings</button>
+                <button class="tab-btn" onclick="switchTab('upgrades')">Upgrades</button>
+                <button class="tab-btn" onclick="switchTab('passport')">Passport</button>
+            </div>
+
+            <!-- 4. CONTENT -->
+            <div id="tab-buildings" class="tab-content active">
+                <!-- Buildings List injected here -->
+            </div>
+            <div id="tab-upgrades" class="tab-content">
+                <div class="upgrades-grid" id="upgrades-list">
+                    <!-- Upgrades Grid injected here -->
+                </div>
+                <p style="text-align:center; color:#777; margin-top:20px;">Buy upgrades to boost production!</p>
+            </div>
+            <div id="tab-passport" class="tab-content">
+                <h3>Current Location</h3>
+                <div id="passport-loc" style="font-size:1.5rem; margin-bottom:10px;">Hungary 🇭🇺</div>
+                <div id="passport-mult" style="color:var(--primary); font-weight:bold;">Multiplier: x1</div>
+                
+                <h3 style="margin-top:20px; border-top:2px solid #ccc; padding-top:10px;">Active Passives</h3>
+                <div id="passives-list">
+                    <!-- Bought upgrades list -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- NEWS BAR -->
+    <div id="news-bar" onmousedown="pauseNews()" onmouseup="resumeNews()" onmouseleave="resumeNews()" ontouchstart="pauseNews()" ontouchend="resumeNews()">
+        <div id="news-label">NEWS</div>
+        <div id="news-track"></div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            fps: 30,
+            locations: [
+                { 
+                    id: 0, name: "Hungary", flag: "🇭🇺", threshold: 0, multiplier: 1, 
+                    colors: { bg: "#CD2A3E", pat: "#436F4D", pri: "#436F4D", acc: "#CD2A3E", txt: "#212121" }, 
+                    welcome: "Welcome to Budapest! It's cold, but the tea is hot.",
+                    music: [220, 246, 261, 293, 329, 349, 415, 440],
+                    coords: { top: '28%', left: '54%' }
+                },
+                { 
+                    id: 1, name: "Spain", flag: "🇪🇸", threshold: 500, multiplier: 1.5, 
+                    colors: { bg: "#AA151B", pat: "#F1BF00", pri: "#F1BF00", acc: "#AA151B", txt: "#212121" }, 
+                    welcome: "Hola! Hani serves Matcha Tapas now.",
+                    music: [329, 349, 392, 415, 392, 349, 329, 293],
+                    coords: { top: '35%', left: '49%' }
+                },
+                { 
+                    id: 2, name: "Netherlands", flag: "🇳🇱", threshold: 2500, multiplier: 2, 
+                    colors: { bg: "#F36C21", pat: "#21468B", pri: "#F36C21", acc: "#21468B", txt: "#212121" }, 
+                    welcome: "Amsterdam! Stroopwafels and Matcha.",
+                    music: [261, 329, 392, 523, 392, 329, 261, 196],
+                    coords: { top: '25%', left: '51%' }
+                },
+                { 
+                    id: 3, name: "UK", flag: "🇬🇧", threshold: 15000, multiplier: 3, 
+                    colors: { bg: "#012169", pat: "#C8102E", pri: "#012169", acc: "#C8102E", txt: "#FFFFFF" }, 
+                    welcome: "London Calling! Swap the Earl Grey for Matcha.",
+                    music: [392, 392, 440, 493, 392, 293, 392, 493],
+                    coords: { top: '24%', left: '49%' }
+                },
+                {
+                    id: 4, name: "Guyana", flag: "🇬🇾", threshold: 50000, multiplier: 4,
+                    colors: { bg: "#009E49", pat: "#FCD116", pri: "#CE1126", acc: "#000000", txt: "#212121" },
+                    welcome: "Welcome to Guyana! The Land of Many Waters... and now Matcha!",
+                    music: [261, 329, 392, 440, 392, 329, 293, 261],
+                    coords: { top: '55%', left: '25%' }
+                },
+                {
+                    id: 5, name: "Suriname", flag: "🇸🇷", threshold: 150000, multiplier: 4.5,
+                    colors: { bg: "#377E3F", pat: "#FFFFFF", pri: "#B40A2D", acc: "#ECC81D", txt: "#212121" },
+                    welcome: "Suriname! Beautiful nature and powerful tea.",
+                    music: [329, 392, 440, 523, 440, 392, 329, 261],
+                    coords: { top: '55%', left: '27%' }
+                },
+                { 
+                    id: 6, name: "USA", flag: "🇺🇸", threshold: 500000, multiplier: 5, 
+                    colors: { bg: "#3C3B6E", pat: "#B22234", pri: "#B22234", acc: "#FFFFFF", txt: "#FFFFFF" }, 
+                    welcome: "USA! The land of opportunity and iced matcha lattes.",
+                    music: [261, 329, 392, 523, 659, 523, 392, 329],
+                    coords: { top: '30%', left: '15%' }
+                },
+                { 
+                    id: 7, name: "Vietnam", flag: "🇻🇳", threshold: 1500000, multiplier: 6, 
+                    colors: { bg: "#ff007f", pat: "#ff4081", pri: "#00e676", acc: "#651fff", txt: "#212121" }, 
+                    welcome: "Home sweet home! The Ultimate HQ.",
+                    music: [261, 293, 349, 392, 440, 523],
+                    coords: { top: '45%', left: '72%' }
+                },
+                { 
+                    id: 8, name: "Matcha Earth", flag: "🌍", threshold: 100000000, multiplier: 10, 
+                    colors: { bg: "#000000", pat: "#00ff00", pri: "#00ff00", acc: "#ffffff", txt: "#00ff00" }, 
+                    welcome: "You have conquered the planet. The world is green.",
+                    music: [523, 659, 784, 1046],
+                    coords: { top: '50%', left: '50%' }
+                }
+            ],
+            buildings: [
+                { id: 0, name: "Bamboo Whisk", symbol: "🥣", baseCost: 15, baseProd: 0.5, desc: "Faster frothing.", 
+                  evolved: { name: "Robo-Arm Whisk", symbol: "🦾", desc: "Industrial frothing automation." },
+                  evolved2: { name: "Quantum Whisk", symbol: "⚛️", desc: "Froths at sub-atomic levels." } 
+                },
+                { id: 1, name: "Lili (Sister)", symbol: "👩🏻", baseCost: 100, baseProd: 4, desc: "She helps out!", anim: "sprite", 
+                  evolved: { name: "Manager Lili", symbol: "👩🏻‍💼", desc: "She runs the place now." },
+                  evolved2: { name: "CEO Lili", symbol: "🕴️", desc: "She runs the world now." }
+                },
+                { id: 2, name: "Plastic Stool", symbol: "🪑", baseCost: 1100, baseProd: 12, desc: "More seats!", 
+                  evolved: { name: "Velvet Sofa", symbol: "🛋️", desc: "Luxury seating." },
+                  evolved2: { name: "Golden Throne", symbol: "💺", desc: "Seating for royalty." } 
+                },
+                { id: 3, name: "Delivery Fleet", symbol: "🛵", baseCost: 12000, baseProd: 47, desc: "Motorbikes everywhere.", anim: "sprite", 
+                  evolved: { name: "Matcha Drones", symbol: "🚁", desc: "Airborne tea delivery." },
+                  evolved2: { name: "Teleporters", symbol: "🚪", desc: "Instant tea transmission." }
+                },
+                { id: 4, name: "Da Lat Tea Hill", symbol: "⛰️", baseCost: 130000, baseProd: 260, desc: "Fresh from the mountains.", anim: "sprite", 
+                  evolved: { name: "Bio-Plantation", symbol: "🧬", desc: "Genetically perfect leaves." },
+                  evolved2: { name: "Matcha Golem", symbol: "🗿", desc: "Living tea guardians." }
+                },
+                { id: 5, name: "Matcha Lab", symbol: "🧪", baseCost: 1400000, baseProd: 1400, desc: "Science of flavor.", anim: "sprite", 
+                  evolved: { name: "Flavor Reactor", symbol: "☢️", desc: "Atomic level taste." },
+                  evolved2: { name: "Taste Singularity", symbol: "🕳️", desc: "Flavor so dense light can't escape." }
+                },
+                { id: 6, name: "Matcha NGO", symbol: "🤝", baseCost: 10000000, baseProd: 6000, desc: "Charity work for tea.", anim: "sprite", 
+                  evolved: { name: "World Peace Org", symbol: "🕊️", desc: "Tea brings peace." },
+                  evolved2: { name: "Galactic Senate", symbol: "👽", desc: "Universal harmony." }
+                },
+                { id: 7, name: "Spirit Portal", symbol: "🌀", baseCost: 50000000, baseProd: 15000, desc: "Summon the Matcha Gods.", anim: "sprite", 
+                  evolved: { name: "Reality Rift", symbol: "🌌", desc: "Tea from the 5th dimension." },
+                  evolved2: { name: "Big Bang Brewer", symbol: "💥", desc: "Creating universes of tea." }
+                }
+            ],
+            // Upgrades sorted by cost in init()
+            upgrades: [
+                { id: 'condensed_milk', name: "Condensed Milk", icon: "🥛", desc: "Clicks x2", cost: 500, type: 'click_mult', value: 2, trigger: g => g.total >= 100 },
+                // Dylan Base: 10s -> Cheap & Early
+                { id: 'dylan', name: "Dylan (BF)", icon: "👨🏾‍🦱", desc: "Auto-Clicks every 10s", cost: 250, type: 'special', value: 0, trigger: g => g.total >= 100, visual: "👨🏾‍🦱" },
+                // Dylan Upgrades
+                { id: 'dylan_2', name: "Dylan's Training", icon: "💪", desc: "Dylan clicks 2s faster (8s)", cost: 5000, type: 'special', value: 0, trigger: g => g.loc >= 1 && g.upgrades.includes('dylan') }, 
+                { id: 'dylan_3', name: "Dylan's Cardio", icon: "🏃🏾", desc: "Dylan clicks 2s faster (6s)", cost: 25000, type: 'special', value: 0, trigger: g => g.loc >= 2 && g.upgrades.includes('dylan_2') }, 
+                { id: 'dylan_4', name: "Dylan's Espresso", icon: "☕", desc: "Dylan clicks 2s faster (4s)", cost: 100000, type: 'special', value: 0, trigger: g => g.loc >= 3 && g.upgrades.includes('dylan_3') }, 
+                { id: 'dylan_5', name: "Dylan's Spirit", icon: "🧘🏾‍♂️", desc: "Dylan clicks 2s faster (2s)", cost: 500000, type: 'special', value: 0, trigger: g => g.loc >= 4 && g.upgrades.includes('dylan_4') }, 
+                { id: 'dylan_6', name: "Time Warp", icon: "⏳", desc: "Dylan hits max speed (0.1s)", cost: 5000000, type: 'special', value: 0, trigger: g => g.loc >= 6 && g.upgrades.includes('dylan_5') }, 
+                { id: 'unending_love', name: "Unending Love", icon: "❤️", desc: "Double the love! 2nd Auto-Clicker.", cost: 10000000, type: 'special', value: 0, trigger: g => g.loc >= 6, visual: "❤️" },
+
+                { id: 'blueberry', name: "Blueberry Mix", icon: "🫐", desc: "Whisks x2", cost: 2500, type: 'building_mult', bId: 0, value: 2, trigger: g => g.buildings[0] >= 10 },
+                { id: 'spoon', name: "Matcha Spoon", icon: "🥄", desc: "Click gains 5% of MPS", cost: 5000, type: 'click_percent_mps', value: 0.05, trigger: g => g.total >= 2000 },
+                { id: 'barni', name: "Barni (Artist)", icon: "👨🏼‍🎨", desc: "Barni paints! Global +20%", cost: 5000, type: 'global_mult', value: 1.2, trigger: g => g.total >= 2000, visual: "👨🏼‍🎨" },
+                { id: 'lucky', name: "Uncle Lucky", icon: "👨🏾", desc: "10% Chance for 2x Click", cost: 7777, type: 'passive', value: 0, trigger: g => g.total >= 5000 },
+                { id: 'modeling', name: "Modeling Contract", icon: "📸", desc: "Lili is famous! Lili x2", cost: 10000, type: 'building_mult', bId: 1, value: 2, trigger: g => g.buildings[1] >= 10 },
+                { id: 'vini', name: "Daily Call from Vini", icon: "👨🏻📞", desc: "Brotherly motivation! Global x1.3", cost: 15000, type: 'global_mult', value: 1.3, trigger: g => g.total >= 10000, visual: "👨🏻" },
+                { id: 'naomi', name: "Naomi's Magic Ball", icon: "🔮", desc: "Future is bright! +10% Crit Chance", cost: 25000, type: 'passive', value: 0, trigger: g => g.loc >= 3, visual: "🔮" }, 
+                { id: 'richi', name: "Richi's Sprint", icon: "🏃🏾‍♂️", desc: "Track star delivery! Fleet x2", cost: 40000, type: 'building_mult', bId: 3, value: 2, trigger: g => g.loc >= 6, visual: "🏃🏾‍♂️" }, 
+                { id: 'orsidia', name: "BFF Orsi & Dia", icon: "👯‍♀️", desc: "Besties support! Global x1.4", cost: 50000, type: 'global_mult', value: 1.4, trigger: g => g.total >= 25000, visual: "👯‍♀️" },
+                { id: 'bao', name: "Bao's Discovery", icon: "👨🏻🏅", desc: "Found the medal! Click Power x1.25", cost: 75000, type: 'click_mult', value: 1.25, trigger: g => g.total >= 40000, visual: "🏅" },
+                { id: 'adri', name: "Adri's Peace", icon: "👩🏾", desc: "Reunited Guyana & Suriname! Global x2.0", cost: 150000, type: 'global_mult', value: 2.0, trigger: g => g.loc >= 4, visual: "🕊️" }, 
+                { id: 'cat', name: "Shop Cat", icon: "🐈", desc: "Cute! Global +10%", cost: 250000, type: 'global_mult', value: 1.1, trigger: g => g.total >= 100000, visual: "🐈" },
+                { id: 'boss_woman', name: "Boss Woman", icon: "👩🏻‍💼", desc: "Hani runs an NGO now. Global x1.5", cost: 400000, type: 'global_mult', value: 1.5, trigger: g => g.buildings[6] > 0 },
+                { id: 'fertilizer', name: "Organic Fertilizer", icon: "🌱", desc: "Tea Hills x2 Production", cost: 500000, type: 'building_mult', bId: 4, value: 2, trigger: g => g.buildings[4] >= 5 },
+                { id: 'nguyen', name: "All I Do Is Nguyen", icon: "🏆", desc: "Win win win! Global x1.5", cost: 750000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
+                { id: 'trade_deal', name: "VN-JP Trade Deal", icon: "🤝", desc: "Big Business! Global +50%", cost: 1000000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 }
+            ],
+            news: [
+                { text: "Hani tries to put paprika in matcha. Hungarians are confused.", req: g => g.loc === 0 },
+                { text: "Breaking: Magyar now officially called 'Matchyar'.", req: g => g.loc === 0 && mps >= 100 },
+                { text: "Hani is dancing Flamenco with a whisk in hand.", req: g => g.loc === 1 },
+                { text: "Dutch news: Green tea stroopwafels are the new craze.", req: g => g.loc === 2 },
+                { text: "The Queen has been spotted sipping Hani's Special Blend.", req: g => g.loc === 3 },
+                { text: "Hani exploring the Kaieteur Falls with a cup of tea.", req: g => g.loc === 4 },
+                { text: "Adri has successfully negotiated a peace treaty using only Matcha.", req: g => g.upgrades.includes('adri') },
+                { text: "Hani says Suriname reminds her of the good vibes.", req: g => g.loc === 5 },
+                { text: "Richi wins gold medal in Matcha Delivery Olympics.", req: g => g.upgrades.includes('richi') },
+                { text: "Hani finally arrives in Vietnam! The tea is perfect.", req: g => g.loc === 7 },
+                { text: "Hanoi traffic stopped for giant tea parade.", req: g => g.loc === 7 },
+                { text: g => `Dylan has drank ${Math.floor(g.total).toLocaleString()} cups of matcha. He is vibrating.`, req: g => g.upgrades.includes('dylan') },
+                { text: "Breaking: Lili has evolved. She cloned herself to cover the night shift.", req: g => g.buildings[1] >= 25 },
+                { text: "Customers confused seeing multiple Lilis at once. 'I'm just fast', she claims.", req: g => g.buildings[1] > 2 },
+                { text: "Uncle Lucky says: 'Put it all on Green!'", req: g => g.upgrades.includes('lucky') },
+                { text: "Naomi predicts high profits today.", req: g => g.upgrades.includes('naomi') },
+                { text: "Orsi & Dia are posting 5-star reviews everywhere.", req: g => g.upgrades.includes('orsidia') },
+                { text: "Shop cat accidentally orders 5000kg of fish.", req: g => g.upgrades.includes('cat') },
+                { text: "Bao found a shiny thing. It was the lost medal!", req: g => g.upgrades.includes('bao') },
+                { text: "Hani elected president of the Matcha NGO.", req: g => g.upgrades.includes('boss_woman') },
+                { text: "Scientists say the world is 70% water, 30% matcha.", req: g => mps > 5000 },
+                { text: "Hani accidentally creates a black hole of flavor. It tastes grassy.", req: g => mps > 50000 },
+                { text: "Reality creates a save point because the matcha is too good.", req: g => mps > 200000 },
+                { text: "Aliens land, ask for 'The Green Stuff'.", req: g => mps > 1000000 },
+                { text: "EARTH IS GREEN.", req: g => g.loc === 8 },
+                { text: "Dylan's hands are shaking from matcha overload.", req: g => g.total >= 10 && g.total < 100 },
+                { text: "Dylan can see time.", req: g => g.total >= 100 && g.total < 1000 },
+                { text: "Dylan has ascended beyond the need for sleep.", req: g => g.total >= 1000 && g.total < 10000 },
+                { text: "Dylan vibrates at the frequency of the universe.", req: g => g.total >= 10000 && g.total < 100000 },
+                { text: "Dylan is no longer man, but pure energy.", req: g => g.total >= 100000 && g.total < 1000000 },
+                { text: "Dylan has become the Matcha Singularity.", req: g => g.total >= 1000000 },
+                { text: "Dylan has surpassed 10,000,000 cups. He is now a constellation.", req: g => g.total >= 10000000 },
+                { text: "Local tea shop runs out of tea, blames Hani.", req: g => true },
+                { text: "Green clouds spotted over the city.", req: g => true },
+                { text: "Hani's Matcha: It's not just tea, it's a lifestyle.", req: g => true },
+                { text: "Breaking: Coffee beans go on strike.", req: g => true },
+                { text: "Matcha is the new water.", req: g => true },
+                { text: "Local man claims he turned green after drinking too much matcha.", req: g => true },
+                { text: "Hani's cafe wins 'Greenest Place on Earth' award.", req: g => true },
+                { text: "Matcha prices soar as demand skyrockets.", req: g => true },
+                { text: "New study shows matcha improves everything.", req: g => true },
+                { text: "Hani considers painting the moon green.", req: g => g.total > 1000000 }
+            ]
+        };
+
+        let state = { res: 0, total: 0, buildings: [0,0,0,0,0,0,0,0], buildingProduction: [0,0,0,0,0,0,0,0], upgrades: [], visuals: [], loc: 0 };
+        let mps = 0, clickPower = 1, clickHistory = [];
+        let buildingMPS = [0,0,0,0,0,0,0,0]; 
+        let audioCtx, isMuted = false, musicTimer, noteIndex = 0;
+        let newsPaused = false;
+        let recentNews = []; 
+        let dylanTimer = 0;
+        let heartTimer = 0;
+        let dylanAngle = 0;
+        let cafeSprites = [];
+
+        function init() {
+            load();
+            while(state.buildings.length < 8) state.buildings.push(0);
+            while(state.buildingProduction.length < 8) state.buildingProduction.push(0);
+            while(buildingMPS.length < 8) buildingMPS.push(0);
+
+            CONFIG.upgrades.sort((a, b) => a.cost - b.cost);
+
+            applyLocationTheme();
+            renderShop();
+            recalc();
+            syncCafeSprites();
+            startNewsCycle();
+            
+            setInterval(() => {
+                updateCafePhysics();
+            }, 1000/60);
+
+            setInterval(() => { 
+                const dt = 1 / CONFIG.fps;
+                if(mps > 0) {
+                    const tick = mps * dt;
+                    addRes(tick); 
+                    CONFIG.buildings.forEach((b, i) => {
+                        state.buildingProduction[i] += (buildingMPS[i] * dt);
+                    });
+                }
+                updateDylan(dt);
+                updateHeart(dt);
+            }, 1000 / CONFIG.fps);
+            setInterval(() => { updateUI(); checkLocationUnlock(); updateActiveRPS(); }, 200);
+            setInterval(save, 5000);
+        }
+
+        /* --- ORBIT LOGIC --- */
+        function updateDylan(dt) {
+            if (!state.upgrades.includes('dylan')) {
+                document.getElementById('dylan-orbit-wrapper').style.display = 'none';
+                return;
+            }
+            document.getElementById('dylan-orbit-wrapper').style.display = 'block';
+            
+            // Calculate Position via JS, No CSS Rotation so Sprite stays upright
+            dylanAngle += dt * 0.5; // Orbit speed
+            const radius = 100; // Radius (Closer)
+            const x = Math.cos(dylanAngle) * radius;
+            const y = Math.sin(dylanAngle) * radius;
+            
+            const sprite = document.getElementById('dylan-sprite');
+            // Reset margin for animation base state
+            if(!sprite.classList.contains('hitting')) {
+                sprite.style.marginTop = "0px";
+            }
+            sprite.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+
+            let interval = 10;
+            if (state.upgrades.includes('dylan_2')) interval = 6;
+            if (state.upgrades.includes('dylan_3')) interval = 3;
+            if (state.upgrades.includes('dylan_4')) interval = 1.5;
+            if (state.upgrades.includes('dylan_5')) interval = 0.5;
+            if (state.upgrades.includes('dylan_6')) interval = 0.1;
+
+            dylanTimer += dt;
+            if (dylanTimer >= interval) {
+                dylanTimer = 0;
+                doClick(true, 'dylan');
+            }
+        }
+
+        function updateHeart(dt) {
+            if (!state.upgrades.includes('unending_love')) {
+                document.getElementById('heart-orbit-wrapper').style.display = 'none';
+                return;
+            }
+            document.getElementById('heart-orbit-wrapper').style.display = 'block';
+            
+            const angle = -dylanAngle; // Counter rotate
+            const radius = 130;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            
+            const sprite = document.getElementById('heart-sprite');
+            if(!sprite.classList.contains('hitting')) {
+                sprite.style.marginTop = "0px";
+            }
+            sprite.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+
+            let interval = 10;
+            if (state.upgrades.includes('dylan_2')) interval = 6;
+            if (state.upgrades.includes('dylan_3')) interval = 3;
+            if (state.upgrades.includes('dylan_4')) interval = 1.5;
+            if (state.upgrades.includes('dylan_5')) interval = 0.5;
+            if (state.upgrades.includes('dylan_6')) interval = 0.1;
+
+            heartTimer += dt;
+            if (heartTimer >= interval) {
+                heartTimer = 0;
+                doClick(true, 'heart');
+            }
+        }
+
+        /* --- CAFE VISUALS --- */
+        function syncCafeSprites() {
+            const newSprites = [];
+            
+            // 1. Buildings
+            CONFIG.buildings.forEach((b, i) => {
+                const count = state.buildings[i];
+                if (count > 0) {
+                    let sym = b.symbol;
+                    if (count >= 50) sym = b.evolved2.symbol;
+                    else if (count >= 25) sym = b.evolved.symbol;
+
+                    const existing = cafeSprites.filter(s => s.type === 'building' && s.id === i);
+                    existing.forEach(s => { s.symbol = sym; s.el.innerText = sym; });
+
+                    const targetCount = Math.min(count, 5);
+                    for(let k=0; k<existing.length; k++) {
+                        if(k < targetCount) newSprites.push(existing[k]);
+                        else existing[k].el.remove();
+                    }
+                    for(let k=existing.length; k<targetCount; k++) {
+                        newSprites.push(createBouncingElement(sym, 'building', i));
+                    }
+                }
+            });
+
+            // 2. Upgrades (Special Sprites)
+            CONFIG.upgrades.forEach(u => {
+                if(u.visual && state.upgrades.includes(u.id)) {
+                    // Check if already exists
+                    const existing = cafeSprites.find(s => s.type === 'upgrade' && s.id === u.id);
+                    if(existing) {
+                        newSprites.push(existing);
+                    } else {
+                        newSprites.push(createBouncingElement(u.visual, 'upgrade', u.id));
+                    }
+                }
+            });
+            
+            // Clean up
+            cafeSprites.forEach(s => {
+                if(!newSprites.includes(s)) s.el.remove();
+            });
+
+            cafeSprites = newSprites;
+        }
+
+        function createBouncingElement(sym, type, id) {
+            // Ensure container exists
+            const container = document.getElementById('sprite-container');
+            if(!container) return null;
+
+            const el = document.createElement('div');
+            el.className = 'bouncing-sprite';
+            el.innerText = sym;
+            container.appendChild(el);
+            
+            let speedMult = 1;
+            if (type === 'upgrade' && id === 'richi') speedMultiplier = 3;
+
+            return {
+                x: Math.random() * 90,
+                y: Math.random() * 80,
+                vx: (Math.random() - 0.5) * 0.5 * speedMult,
+                vy: (Math.random() - 0.5) * 0.5 * speedMult,
+                symbol: sym,
+                type: type,
+                id: id,
+                el: el
+            };
+        }
+
+        function updateCafePhysics() {
+            cafeSprites.forEach(s => {
+                if(!s.el) return;
+                s.x += s.vx;
+                s.y += s.vy;
+                if (s.x <= 0 || s.x >= 95) s.vx *= -1;
+                if (s.y <= 0 || s.y >= 90) s.vy *= -1;
+                s.el.style.left = s.x + '%';
+                s.el.style.top = s.y + '%';
+            });
+        }
+
+        function showNewspaper(headline, body) {
+            document.getElementById('np-headline').innerText = headline;
+            document.getElementById('np-body').innerText = body;
+            document.getElementById('newspaper-overlay').style.display = 'flex';
+        }
+        function closeNewspaper() { document.getElementById('newspaper-overlay').style.display = 'none'; }
+
+        /* --- MENUS & MAP --- */
+        function toggleMenu() {
+            const el = document.getElementById('menu-overlay');
+            el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+            document.getElementById('mute-btn-menu').innerText = isMuted ? "🔇 SOUND OFF" : "🔊 SOUND ON";
+        }
+
+        function toggleMap() {
+            const el = document.getElementById('map-overlay');
+            if(el.style.display === 'flex') {
+                el.style.display = 'none';
+            } else {
+                renderMap();
+                el.style.display = 'flex';
+                document.getElementById('menu-overlay').style.display = 'none';
+            }
+        }
+
+        function renderMap() {
+            const container = document.getElementById('map-container');
+            const oldPins = container.querySelectorAll('.map-pin');
+            oldPins.forEach(p => p.remove());
+            
+            CONFIG.locations.forEach((loc, index) => {
+                if(loc.id === 8 && state.loc < 8) return; 
+
+                const isActive = state.loc === index;
+                const isPassed = state.loc > index;
+                
+                const pin = document.createElement('div');
+                pin.className = `map-pin ${isActive ? 'active' : ''} ${!isActive && !isPassed ? 'locked' : ''}`;
+                
+                if (loc.coords) {
+                    pin.style.top = loc.coords.top;
+                    pin.style.left = loc.coords.left;
+                }
+
+                const tip = document.createElement('div');
+                tip.className = 'map-tooltip';
+                tip.innerText = `${loc.flag} ${loc.name}`;
+                pin.appendChild(tip);
+
+                container.appendChild(pin);
+            });
+        }
+
+        function toggleStats() {
+            const el = document.getElementById('stats-overlay');
+            if (el.style.display === 'flex') {
+                el.style.display = 'none';
+            } else {
+                updateStatsContent();
+                el.style.display = 'flex';
+                document.getElementById('menu-overlay').style.display = 'none';
+            }
+        }
+
+        /* --- CONTINUOUS NEWS TICKER --- */
+        let newsTrack = document.getElementById('news-track');
+        let newsSpeed = 0.8; 
+        
+        function startNewsCycle() {
+            requestAnimationFrame(animateNews);
+        }
+
+        function pauseNews() { newsPaused = true; }
+        function resumeNews() { newsPaused = false; }
+
+        function animateNews() {
+            if(!newsPaused) {
+                const items = document.querySelectorAll('.news-item');
+                if (items.length === 0) {
+                    spawnNewsItem();
+                } else {
+                    const lastItem = items[items.length - 1];
+                    const rect = lastItem.getBoundingClientRect();
+                    const containerRect = document.getElementById('news-bar').getBoundingClientRect();
+                    if (rect.right < containerRect.right - 100) {
+                        spawnNewsItem();
+                    }
+                }
+
+                items.forEach(item => {
+                    let currentLeft = parseFloat(item.style.left);
+                    item.style.left = (currentLeft - newsSpeed) + 'px';
+                    if (currentLeft < -item.offsetWidth) {
+                        item.remove();
+                    }
+                });
+            }
+            requestAnimationFrame(animateNews);
+        }
+
+        function spawnNewsItem() {
+            const availableNews = CONFIG.news.filter(n => n.req(state));
+            if (availableNews.length === 0) return;
+            
+            let pool = availableNews.filter(n => {
+                const t = typeof n.text === 'function' ? n.text(state) : n.text;
+                return !recentNews.includes(t);
+            });
+            
+            if (pool.length === 0) pool = availableNews;
+            
+            // If pool is still just 1 item and it's in recent, we have to show it.
+            // To improve variety, we can force pick from full available list if pool is small.
+            // But filtering last 5 should be fine with enough content.
+            
+            const rand = pool[Math.floor(Math.random() * pool.length)];
+            const text = typeof rand.text === 'function' ? rand.text(state) : rand.text;
+            
+            recentNews.push(text);
+            if(recentNews.length > 5) recentNews.shift();
+
+            const span = document.createElement('span');
+            span.className = 'news-item';
+            span.style.position = 'absolute';
+            span.style.left = document.getElementById('news-bar').offsetWidth + 'px'; 
+            span.innerText = text + " • ";
+            document.getElementById('news-track').appendChild(span);
+        }
+
+        /* --- UI RENDERERS --- */
+        function renderShop() {
+            const bContainer = document.getElementById('tab-buildings');
+            bContainer.innerHTML = '';
+            CONFIG.buildings.forEach((b, i) => {
+                const div = document.createElement('div');
+                div.className = 'shop-item disabled';
+                div.id = `build-${i}`;
+                div.onclick = () => buyBuilding(i);
+                
+                div.onmouseenter = () => {
+                    const count = state.buildings[i];
+                    let name = b.name;
+                    let desc = b.desc;
+                    let sym = b.symbol;
+                    
+                    if (count >= 50) {
+                        name = b.evolved2.name;
+                        desc = b.evolved2.desc + " (4x Output!)";
+                        sym = b.evolved2.symbol;
+                    } else if (count >= 25) {
+                        name = b.evolved.name;
+                        desc = b.evolved.desc + " (2x Output!)";
+                        sym = b.evolved.symbol;
+                    }
+                    
+                    if (count >= 100) desc += " (x10000 Overcharge!)";
+
+                    showInfo(sym, name, desc, `Cost: ${Math.floor(b.baseCost * Math.pow(1.15, count)).toLocaleString()}`);
+                };
+                div.onmouseleave = clearInfo;
+                div.innerHTML = `
+                    <div class="item-icon" id="icon-${i}">${b.symbol}</div>
+                    <div class="item-details"><h3 id="name-${i}">${b.name}</h3></div>
+                    <div class="item-right">
+                        <div class="item-cost" id="cost-${i}">0</div>
+                        <div class="item-count" id="count-${i}">0</div>
+                    </div>
+                `;
+                bContainer.appendChild(div);
+            });
+
+            const uContainer = document.getElementById('upgrades-list');
+            uContainer.innerHTML = '';
+            CONFIG.upgrades.forEach(u => {
+                const div = document.createElement('div');
+                div.className = 'upgrade-card';
+                div.id = `upg-${u.id}`;
+                div.style.display = 'none';
+                div.innerHTML = `${u.icon}`;
+                div.onclick = () => buyUpgrade(u.id);
+                div.onmouseenter = () => showInfo(u.icon, u.name, u.desc, `Cost: ${u.cost.toLocaleString()}`);
+                div.onmouseleave = clearInfo;
+                uContainer.appendChild(div);
+            });
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            
+            const btns = document.querySelectorAll('.tab-btn');
+            if(tab === 'buildings') btns[0].classList.add('active');
+            if(tab === 'upgrades') btns[1].classList.add('active');
+            if(tab === 'passport') {
+                btns[2].classList.add('active');
+                updatePassport();
+            }
+        }
+
+        function showInfo(icon, title, desc, cost) {
+            document.getElementById('info-icon-container').innerText = icon;
+            document.getElementById('info-title').innerText = title;
+            document.getElementById('info-desc').innerText = desc;
+            document.getElementById('info-cost').innerText = cost;
+        }
+
+        function clearInfo() {
+            document.getElementById('info-icon-container').innerText = "?";
+            document.getElementById('info-title').innerText = "Info Panel";
+            document.getElementById('info-desc').innerText = "Hover over items to see details.";
+            document.getElementById('info-cost').innerText = "";
+        }
+
+        function updatePassport() {
+            const list = document.getElementById('passives-list');
+            list.innerHTML = '';
+            if(state.upgrades.length === 0) {
+                list.innerHTML = '<div style="color:#999; font-style:italic;">No active passives yet.</div>';
+                return;
+            }
+            state.upgrades.forEach(uid => {
+                const u = CONFIG.upgrades.find(x => x.id === uid);
+                if(u) {
+                    const div = document.createElement('div');
+                    div.className = 'passive-row';
+                    div.innerHTML = `<span style="font-size:1.5rem; margin-right:10px;">${u.icon}</span> <strong>${u.name}</strong>: ${u.desc}`;
+                    list.appendChild(div);
+                }
+            });
+            const loc = CONFIG.locations[state.loc];
+            document.getElementById('passport-loc').innerText = `${loc.name} ${loc.flag}`;
+            document.getElementById('passport-mult').innerText = `Global Multiplier: x${loc.multiplier}`;
+        }
+
+        function updateStatsContent() {
+            const container = document.getElementById('stats-content');
+            let bHtml = '<table class="stats-table"><tr><th>Building</th><th>Owned</th><th>Total Generated</th></tr>';
+            CONFIG.buildings.forEach((b, i) => {
+                if(state.buildings[i] > 0) {
+                    let name = b.name;
+                    if (state.buildings[i] >= 50) name = b.evolved2.name;
+                    else if (state.buildings[i] >= 25) name = b.evolved.name;
+                    
+                    const val = Math.floor(state.buildingProduction[i]).toLocaleString();
+                    bHtml += `<tr><td>${name}</td><td>${state.buildings[i]}</td><td>${val}</td></tr>`;
+                }
+            });
+            bHtml += '</table>';
+            let uHtml = '<div style="text-align:left;">';
+            state.upgrades.forEach(uid => {
+                const u = CONFIG.upgrades.find(x => x.id === uid);
+                uHtml += `<span style="margin-right:10px; font-size:1.5rem;" title="${u.name}">${u.icon}</span>`;
+            });
+            uHtml += '</div>';
+            container.innerHTML = `<p><strong>Total Matcha Produced:</strong> ${Math.floor(state.total).toLocaleString()}</p><p><strong>Current MPS:</strong> ${mps.toFixed(1)}</p><hr><h3>Building Output</h3>${bHtml}<h3>Collection</h3>${uHtml}`;
+        }
+
+        /* --- GAME LOGIC --- */
+        function addRes(n) {
+            state.res += n; state.total += n;
+            document.getElementById('resource-count').innerText = Math.floor(state.res).toLocaleString();
+        }
+
+        function doClick(auto = false, source = 'user') {
+            let amount = clickPower;
+            let isCrit = false;
+            
+            let critChance = 0;
+            if(state.upgrades.includes('lucky')) critChance += 0.1;
+            if(state.upgrades.includes('naomi')) critChance += 0.1;
+            
+            if(Math.random() < critChance) { amount *= 2; isCrit = true; }
+            
+            addRes(amount);
+            
+            const btn = document.getElementById('click-btn');
+            
+            if(!auto) {
+                clickHistory.push(Date.now());
+                sfxClick();
+                // Manual visual
+                const rect = btn.getBoundingClientRect();
+                const containerRect = document.getElementById('click-btn-container').getBoundingClientRect();
+                
+                const x = (rect.left - containerRect.left) + Math.random() * rect.width;
+                const y = (rect.top - containerRect.top) + Math.random() * rect.height;
+                
+                spawnFloat(amount, isCrit, x, y);
+            } else {
+                // Auto click effect
+                btn.classList.add('bump');
+                setTimeout(() => btn.classList.remove('bump'), 150);
+                
+                // Animate Orbiter Lunge
+                if(source === 'dylan') {
+                    const el = document.getElementById('dylan-sprite');
+                    if(el) { el.classList.add('hitting'); setTimeout(() => el.classList.remove('hitting'), 150); }
+                } else if (source === 'heart') {
+                    const el = document.getElementById('heart-sprite');
+                    if(el) { el.classList.add('hitting'); setTimeout(() => el.classList.remove('hitting'), 150); }
+                }
+
+                // Spawn float at center
+                const btnContainer = document.getElementById('click-btn-container');
+                spawnFloat(amount, isCrit, btnContainer.offsetWidth/2, btnContainer.offsetHeight/2 - 20);
+            }
+        }
+        
+        function spawnFloat(amount, isCrit, x, y) {
+            const float = document.createElement('div');
+            float.className = isCrit ? 'floater crit' : 'floater';
+            float.innerText = `+${Math.floor(amount)}` + (isCrit ? "!" : "");
+            float.style.left = x + 'px';
+            float.style.top = y + 'px';
+            document.getElementById('click-btn-container').appendChild(float);
+            setTimeout(() => float.remove(), 800);
+        }
+
+        document.getElementById('click-btn').addEventListener('mousedown', (e) => doClick(false));
+
+        function buyBuilding(id) {
+            const cost = Math.floor(CONFIG.buildings[id].baseCost * Math.pow(1.15, state.buildings[id]));
+            if(state.res >= cost) {
+                state.res -= cost;
+                state.buildings[id]++;
+                sfxBuy();
+                
+                // Evolution Check
+                if(state.buildings[id] === 25) {
+                    showNewspaper(CONFIG.buildings[id].evolved.name, `Your ${CONFIG.buildings[id].name}s have Evolved! 2x Production!`);
+                } else if(state.buildings[id] === 50) {
+                    showNewspaper(CONFIG.buildings[id].evolved2.name, `TIER 3 REACHED! Your production has quadrupled!`);
+                }
+
+                recalc(); updateUI(); syncCafeSprites();
+            }
+        }
+
+        function buyUpgrade(id) {
+            const u = CONFIG.upgrades.find(x => x.id === id);
+            if(u && state.res >= u.cost && !state.upgrades.includes(id)) {
+                state.res -= u.cost;
+                state.upgrades.push(id);
+                sfxBuy();
+                recalc(); updateUI(); syncCafeSprites(); // Add sprites if upgrade has visual
+            }
+        }
+
+        function recalc() {
+            let mult = CONFIG.locations[state.loc].multiplier;
+            let clickM = 1, clickF = 0, clickP = 0, bMults = [1,1,1,1,1,1,1,1];
+            state.upgrades.forEach(uid => {
+                const u = CONFIG.upgrades.find(x => x.id === uid);
+                if(u.type === 'global_mult') mult *= u.value;
+                if(u.type === 'click_mult') clickM *= u.value;
+                if(u.type === 'click_flat') clickF += u.value;
+                if(u.type === 'click_percent_mps') clickP += u.value;
+                if(u.type === 'building_mult') bMults[u.bId] *= u.value;
+            });
+            let rawMps = 0;
+            buildingMPS = [0,0,0,0,0,0,0,0];
+            CONFIG.buildings.forEach((b, i) => {
+                let production = b.baseProd * state.buildings[i];
+                if(state.buildings[i] >= 100) production *= 10000;
+                else if(state.buildings[i] >= 50) production *= 4;
+                else if(state.buildings[i] >= 25) production *= 2;
+                
+                const finalProd = production * bMults[i];
+                buildingMPS[i] = finalProd * mult;
+                rawMps += finalProd;
+            });
+            mps = rawMps * mult;
+            let baseClick = (1 + clickF) * clickM * CONFIG.locations[state.loc].multiplier;
+            clickPower = baseClick + (mps * clickP);
+        }
+
+        function updateUI() {
+            CONFIG.buildings.forEach((b, i) => {
+                const count = state.buildings[i];
+                const cost = Math.floor(b.baseCost * Math.pow(1.15, count));
+                const el = document.getElementById(`build-${i}`);
+                
+                let name = b.name;
+                let sym = b.symbol;
+                
+                if (count >= 50) {
+                    name = b.evolved2.name;
+                    sym = b.evolved2.symbol;
+                } else if (count >= 25) {
+                    name = b.evolved.name;
+                    sym = b.evolved.symbol;
+                }
+
+                document.getElementById(`name-${i}`).innerText = name;
+                document.getElementById(`icon-${i}`).innerText = sym;
+                document.getElementById(`cost-${i}`).innerText = cost.toLocaleString();
+                document.getElementById(`count-${i}`).innerText = count;
+                
+                // Keep tooltip fresh
+                if(el.matches(':hover')) el.onmouseenter();
+
+                if(state.res >= cost) el.classList.remove('disabled'); else el.classList.add('disabled');
+            });
+            CONFIG.upgrades.forEach(u => {
+                const el = document.getElementById(`upg-${u.id}`);
+                if(state.upgrades.includes(u.id)) { el.style.display = 'none'; } 
+                else if(u.trigger(state)) { el.style.display = 'flex'; if(state.res >= u.cost) el.classList.remove('disabled'); else el.classList.add('disabled'); }
+            });
+            
+            // Progress Bar Update
+            const nextLoc = CONFIG.locations[state.loc + 1];
+            const goalText = document.getElementById('goal-text');
+            const bar = document.getElementById('goal-progress');
+            
+            if (nextLoc) {
+                goalText.innerText = `NEXT: ${nextLoc.name} (${nextLoc.threshold.toLocaleString()} MPS)`;
+                const pct = Math.min(100, (mps / nextLoc.threshold) * 100);
+                bar.style.width = `${pct}%`;
+            } else {
+                goalText.innerText = "GLOBAL DOMINATION!";
+                bar.style.width = "100%";
+            }
+        }
+        
+        function updateActiveRPS() {
+            const now = Date.now();
+            clickHistory = clickHistory.filter(t => now - t < 1000);
+            const uiActive = clickHistory.length * clickPower;
+            document.getElementById('rps-display').innerText = `${(mps + uiActive).toFixed(1)} / SEC`;
+            const el = document.getElementById('active-rps');
+            el.innerText = uiActive > 0 ? `(Passive: ${mps.toFixed(1)} | Active: +${uiActive.toFixed(1)})` : "";
+        }
+
+        function checkLocationUnlock() {
+            const nextLocIdx = state.loc + 1;
+            if(nextLocIdx < CONFIG.locations.length && mps >= CONFIG.locations[nextLocIdx].threshold) {
+                // Determine previous location name for the story
+                const prevLocName = CONFIG.locations[state.loc].name;
+                
+                state.loc = nextLocIdx;
+                applyLocationTheme();
+                recalc();
+                startMusic(); 
+                
+                // NEWSPAPER POPUP
+                showNewspaper(
+                    `HELLO ${CONFIG.locations[nextLocIdx].name.toUpperCase()}!`, 
+                    `The people of ${prevLocName} have succumbed to Matcha Madness! Hani has expanded her empire!`
+                );
+            }
+        }
+        
+        function applyLocationTheme() {
+            const loc = CONFIG.locations[state.loc];
+            const r = document.documentElement.style;
+            r.setProperty('--bg-color', loc.colors.bg);
+            r.setProperty('--bg-pattern', loc.colors.pat);
+            r.setProperty('--primary', loc.colors.pri);
+            r.setProperty('--accent', loc.colors.acc);
+            r.setProperty('--text-color', loc.colors.txt || '#212121');
+        }
+
+        function startGame() { document.getElementById('intro-overlay').style.display = 'none'; initAudio(); }
+        function closeLocPopup() { document.getElementById('location-popup').style.display = 'none'; }
+        function save() { localStorage.setItem('haniVibrantSave', JSON.stringify(state)); }
+        function load() { const d = localStorage.getItem('haniVibrantSave'); if(d) { const saved = JSON.parse(d); state = {...state, ...saved}; } }
+        function resetGame() { if(confirm("Reset?")) { localStorage.removeItem('haniVibrantSave'); location.reload(); } }
+
+        function initAudio() { if(!audioCtx) { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); startMusic(); } else if(audioCtx.state==='suspended') audioCtx.resume(); }
+        function playTone(freq,type,dur,vol) { if(isMuted||!audioCtx)return; const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+dur);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur); }
+        function startMusic() { if(musicTimer) clearInterval(musicTimer); const notes = CONFIG.locations[state.loc].music; noteIndex = 0; musicTimer = setInterval(() => { if(!isMuted && audioCtx && audioCtx.state === 'running') { playTone(notes[noteIndex], 'triangle', 0.3, 0.05); noteIndex = (noteIndex + 1) % notes.length; } }, 400); }
+        function sfxClick() { if(!audioCtx)initAudio(); playTone(880,'sine',0.1,0.1); }
+        function sfxBuy() { if(!audioCtx)initAudio(); playTone(1046,'square',0.1,0.05); setTimeout(()=>playTone(1318,'square',0.2,0.05),100); }
+        function toggleAudio() { isMuted=!isMuted; document.getElementById('mute-btn-menu').innerText=isMuted?"🔇 SOUND OFF":"🔊 SOUND ON"; if(!isMuted&&audioCtx&&audioCtx.state==='suspended') audioCtx.resume(); }
+
+        init();
+    </script>
+</body>
+</html>
