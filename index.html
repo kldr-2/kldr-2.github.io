@@ -21,7 +21,7 @@
             --border-width: 4px;
         }
 
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
 
         body {
             margin: 0;
@@ -95,6 +95,7 @@
             text-shadow: 1px 1px 0 #000;
             margin: 5px;
             display: inline-block;
+            user-select: none;
         }
         .pixel-btn:active { transform: scale(0.95); box-shadow: 2px 2px 0px rgba(0,0,0,0.5); }
 
@@ -177,7 +178,12 @@
             width: 180px; height: 180px; background-color: var(--primary); border: 6px solid var(--border-color); border-radius: 50%;
             display: flex; align-items: center; justify-content: center; font-size: 5rem; cursor: pointer;
             box-shadow: 0px 8px 0px rgba(0,0,0,0.3); position: relative; z-index: 10; transition: transform 0.05s;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            user-select: none;
+            outline: none;
         }
+        #click-btn:focus { outline: none; }
         #click-btn:active, #click-btn.bump { transform: scale(0.95); box-shadow: none; }
         #click-btn::after { content: "🍵"; filter: drop-shadow(4px 4px 0px rgba(0,0,0,0.5)); }
 
@@ -275,6 +281,7 @@
 
         /* NEWS BAR */
         #news-bar { background: var(--news-bg); color: white; border-top: 4px solid black; height: 30px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex-shrink: 0; position: relative; cursor: grab; }
+        #news-bar:active { cursor: grabbing; }
         #news-label { background: var(--accent); padding: 0 10px; height: 100%; display: flex; align-items: center; font-weight: bold; font-size: 1.2rem; z-index: 10; position: absolute; left: 0; top: 0; }
         #news-track { display: flex; position: absolute; left: 80px; height: 100%; align-items: center; }
         .news-item { font-size: 1.2rem; padding-right: 40px; white-space: nowrap; }
@@ -348,6 +355,7 @@
             <br>
             <button class="pixel-btn" onclick="toggleStats()" data-i18n="ui_stats">📊 STATS</button>
             <br>
+            <button class="pixel-btn" onclick="replayIntro()" data-i18n="ui_replay">REPLAY INTRO</button>
             <div style="margin: 10px 0; border: 1px dashed #000; padding: 10px;">
                 <p style="margin:0 0 5px 0; font-size:1rem;" data-i18n="ui_lang">LANGUAGE</p>
                 <button class="pixel-btn small" onclick="setLanguage('en')">EN</button>
@@ -515,6 +523,7 @@
                 goal_prefix: "NEXT GOAL:",
                 goal_global: "GLOBAL DOMINATION!",
                 ui_menu: "MENU", ui_map: "🗺️ VIEW MAP", ui_worldmap: "WORLD TOUR MAP", ui_stats: "📊 STATISTICS", ui_stats_title: "Café Statistics", ui_lang: "LANGUAGE", ui_resume: "RESUME", ui_reset: "RESET SAVE", ui_close: "CLOSE", ui_news: "NEWS",
+                ui_replay: "REPLAY INTRO",
                 btn_start: "START", btn_letsgo: "LET'S GO!", btn_nice: "NICE", btn_readmore: "READ MORE", btn_yes: "YES", btn_no: "NO",
                 news_sub: "THE MATCHA CHRONICLES", scene_label: "HANI'S CAFÉ FLOOR (STATS)", loc_new: "NEW COUNTRY!", loc_arrived: "You have arrived.", reset_confirm: "Are you sure?", reset_desc: "This will wipe your save.",
 
@@ -527,7 +536,15 @@
                 b6_n: "Matcha NGO", b6_d: "Charity work for tea.", b6_n_t2: "World Peace Org", b6_d_t2: "Tea brings peace.", b6_n_t3: "Galactic Senate", b6_d_t3: "Universal harmony.",
                 b7_n: "Spirit Portal", b7_d: "Summon the Matcha Gods.", b7_n_t2: "Reality Rift", b7_d_t2: "Tea from the 5th dimension.", b7_n_t3: "Big Bang Brewer", b7_d_t3: "Creating universes of tea.",
 
-                loc_0: "Hungary", loc_1: "Spain", loc_2: "Netherlands", loc_3: "UK", loc_4: "Guyana", loc_5: "Suriname", loc_6: "USA", loc_7: "Vietnam", loc_8: "Matcha Earth",
+                loc_0: "Hungary", loc_w_0: "Christmas Market Budapest! Cold air, hot tea.",
+                loc_1: "Spain", loc_w_1: "Hola! Hani serves Matcha Tapas now.",
+                loc_2: "Netherlands", loc_w_2: "Amsterdam! Stroopwafels and Matcha.",
+                loc_3: "UK", loc_w_3: "London Calling! Swap the Earl Grey for Matcha.",
+                loc_4: "Guyana", loc_w_4: "Welcome to Guyana! The Land of Many Waters... and now Matcha!",
+                loc_5: "Suriname", loc_w_5: "Suriname! Beautiful nature and powerful tea.",
+                loc_6: "USA", loc_w_6: "USA! The land of opportunity and iced matcha lattes.",
+                loc_7: "Vietnam", loc_w_7: "Home sweet home! The Ultimate HQ.",
+                loc_8: "Matcha Earth", loc_w_8: "You have conquered the planet. The world is green.",
 
                 u_condensed_milk: "Condensed Milk", u_condensed_milk_d: "Clicks x2",
                 u_dylan: "Dylan (BF)", u_dylan_d: "Auto-Clicks every 10s",
@@ -597,16 +614,231 @@
                 n_gen_4: "Local man claims he turned green after drinking too much matcha.",
                 n_gen_5: "Hani's cafe wins 'Greenest Place on Earth' award."
             },
-            // Fallbacks for other languages to prevent crashing
-            hu: { intro_title: "Hani Matcha Kávézója", currency: "MATCHA", welcome: "Üdv", hover_info: "Részletek...", ui_menu: "MENÜ", ui_map: "TÉRKÉP", ui_stats: "STATISZTIKA", btn_start: "INDÍTÁS", btn_letsgo: "GYERÜNK", b0_n: "Habverő", b0_d: "Gyorsabb habosítás." },
-            nl: { intro_title: "Hani's Matcha Café", currency: "MATCHA'S", welcome: "Welkom", hover_info: "Details...", ui_menu: "MENU", ui_map: "KAART", ui_stats: "STATISTIEKEN", btn_start: "START", btn_letsgo: "GAAN!", b0_n: "Garde", b0_d: "Sneller kloppen." },
-            vi: { intro_title: "Cà phê Matcha của Hani", currency: "MATCHA", welcome: "Chào mừng", hover_info: "Chi tiết...", ui_menu: "MENU", ui_map: "BẢN ĐỒ", ui_stats: "THỐNG KÊ", btn_start: "BẮT ĐẦU", btn_letsgo: "ĐI THÔI!", b0_n: "Cây đánh trà", b0_d: "Đánh nhanh hơn." }
+            hu: {
+                intro_title: "Hani Ünnepi Matcha Kávézója", intro_text: "Karácsony van Budapesten! Hani igazi Matchát akar adni a világnak. Fogd a Legendás Habverőt és indulj!",
+                tut_title: "HOGYAN JÁTSSZ", tut_1: "1. KATTINTS a nagy Matchára.", tut_2: "2. VÁSÁROLJ fejlesztéseket.", tut_3: "3. UTAZD be a világot!",
+                currency: "MATCHA", tab_buildings: "Épületek", tab_upgrades: "Extrák", tab_passport: "Útlevél", welcome: "Üdvözöllek",
+                hover_info: "Vidd rá az egeret a részletekért.", buy_upgrades: "Vegyél extrákat a termeléshez!", curr_loc: "Jelenlegi Hely",
+                passives: "Aktív Hatások", goal_prefix: "KÖVETKEZŐ CÉL:", goal_global: "VILÁGURALOM!", ui_menu: "MENÜ", ui_map: "TÉRKÉP", ui_stats: "STATISZTIKA", ui_lang: "NYELV", ui_resume: "FOLYTATÁS", ui_reset: "MENTÉS TÖRLÉSE", ui_close: "BEZÁR", ui_news: "HÍREK", ui_worldmap: "VILÁG TÉRKÉP", ui_stats_title: "Kávézó Statisztikák", ui_replay: "INTRO ÚJRAJÁTSZÁSA",
+                btn_start: "INDÍTÁS", btn_letsgo: "GYERÜNK!", btn_nice: "SZUPER", btn_readmore: "OLVASS TOVÁBB", btn_yes: "IGEN", btn_no: "NEM", news_sub: "A MATCHA KRÓNIKÁK", scene_label: "HANI KÁVÉZÓJA (STATS)", loc_new: "ÚJ ORSZÁG!", loc_arrived: "Megérkeztél.",
+                reset_confirm: "Biztos vagy benne?", reset_desc: "Minden eddigi haladás törlődik.",
+
+                b0_n: "Bambusz Habverő", b0_d: "Gyorsabb habosítás.", b0_n_t2: "Robotkar", b0_d_t2: "Ipari habosítás.", b0_n_t3: "Kvantum Habverő", b0_d_t3: "Szubatomi habosítás.",
+                b1_n: "Lili (Hugica)", b1_d: "Segít neked!", b1_n_t2: "Menedzser Lili", b1_d_t2: "Ő vezeti a helyet.", b1_n_t3: "CEO Lili", b1_d_t3: "Ő vezeti a világot.",
+                b2_n: "Műanyag Szék", b2_d: "Több ülőhely!", b2_n_t2: "Bársony Kanapé", b2_d_t2: "Luxus ülőhely.", b2_n_t3: "Arany Trón", b2_d_t3: "Királyi ülőhely.",
+                b3_n: "Futár Flotta", b3_d: "Motorok mindenhol.", b3_n_t2: "Matcha Drónok", b3_d_t2: "Légi szállítás.", b3_n_t3: "Teleportok", b3_d_t3: "Azonnali tea átvitel.",
+                b4_n: "Da Lat Tea Hegy", b4_d: "Friss a hegyekből.", b4_n_t2: "Bio-Ültetvény", b4_d_t2: "Genetikailag tökéletes.", b4_n_t3: "Matcha Gólem", b4_d_t3: "Élő tea őrzők.",
+                b5_n: "Matcha Labor", b5_d: "Az íz tudománya.", b5_n_t2: "Íz Reaktor", b5_d_t2: "Atomi szintű íz.", b5_n_t3: "Íz Szingularitás", b5_d_t3: "Olyan sűrű íz, hogy a fény sem jut ki.",
+                b6_n: "Matcha NGO", b6_d: "Jótékonysági tea.", b6_n_t2: "Világbéke Szervezet", b6_d_t2: "A tea békét hoz.", b6_n_t3: "Galaktikus Szenátus", b6_d_t3: "Univerzális harmónia.",
+                b7_n: "Szellem Portál", b7_d: "Idézd meg a Matcha Isteneket.", b7_n_t2: "Valóság Hasadék", b7_d_t2: "Tea az 5. dimenzióból.", b7_n_t3: "Ősrobbanás Főző", b7_d_t3: "Tea univerzumok teremtése.",
+
+                loc_0: "Magyarország", loc_w_0: "Budapesti Karácsonyi Vásár! Hideg levegő, forró tea.",
+                loc_1: "Spanyolország", loc_w_1: "Hola! Hani most Matcha Tapast szolgál fel.",
+                loc_2: "Hollandia", loc_w_2: "Amszterdam! Stroopwafel és Matcha.",
+                loc_3: "Egyesült Királyság", loc_w_3: "London hív! Cseréld az Earl Greyt Matchára.",
+                loc_4: "Guyana", loc_w_4: "Üdv Guyanában! A sok víz földje... és most már a Matcháé!",
+                loc_5: "Suriname", loc_w_5: "Suriname! Gyönyörű természet és erős tea.",
+                loc_6: "USA", loc_w_6: "USA! A lehetőségek és a jeges matcha latték földje.",
+                loc_7: "Vietnam", loc_w_7: "Otthon, édes otthon! A Végső Főhadiszállás.",
+                loc_8: "Matcha Föld", loc_w_8: "Meghódítottad a bolygót. A világ zöld.",
+
+                u_condensed_milk: "Sűrített Tej", u_condensed_milk_d: "Kattintás x2",
+                u_dylan: "Dylan (Barát)", u_dylan_d: "Auto-Klikk 10mp-enként",
+                u_spoon: "Matcha Kanál", u_spoon_d: "Kattintás az MPS 5%-át adja",
+                u_barni: "Barni (Művész)", u_barni_d: "Barni fest! Termelés +20%",
+                u_lucky: "Szerencsés Bácsi", u_lucky_d: "10% esély 2x kattintásra",
+                u_modeling: "Modell Szerződés", u_modeling_d: "Lili híres! Lili x2",
+                u_vini: "Napi Hívás Vinitől", u_vini_d: "Testvéri motiváció! x1.3",
+                u_naomi: "Naomi Varázsgömbje", u_naomi_d: "Fényes jövő! +10% Kritikus",
+                u_richi: "Richi Sprintje", u_richi_d: "Futár sztár! Flotta x2",
+                u_orsidia: "Orsi & Dia", u_orsidia_d: "Barátnők támogatása! x1.4",
+                u_bao: "Bao Felfedezése", u_bao_d: "Meglett az érem! Kattintás x1.25",
+                u_adri: "Adri Békéje", u_adri_d: "Egyesítette Guyanát & Suriname-ot! x2.0",
+                u_cat: "Bolti Macska", u_cat_d: "Cuki! x1.1",
+                u_boss_woman: "Főnökasszony", u_boss_woman_d: "Hani NGO-t vezet. x1.5",
+                u_fertilizer: "Bio Trágya", u_fertilizer_d: "Tea Hegy x2",
+                u_nguyen: "Csak A Győzelem", u_nguyen_d: "Nyerés! x1.5",
+                u_trade_deal: "VN-JP Kereskedelem", u_trade_deal_d: "Nagy Üzlet! x1.5",
+
+                n_start_1: "Hani paprikát tesz a matchába. A magyarok zavartak.",
+                n_start_2: "Budapesti lakos: 'Ez leves?'",
+                n_matchyar: "Friss hír: Magyarország új neve 'Matchyarország'.",
+                n_spain_1: "Hani Flamencót táncol habverővel a kézben.",
+                n_spain_2: "Szieszta törölve, túl sok a koffein.",
+                n_nl_1: "Holland hírek: A zöld tea stroopwafel az új őrület.",
+                n_nl_2: "Amszterdam csatornái zöldek... Hani gyanús.",
+                n_uk_1: "A Királynőt látták Hani teáját inni.",
+                n_uk_2: "A londoni köd valójában matcha gőz.",
+                n_guyana: "Hani a Kaieteur-vízesésnél teázik.",
+                n_adri: "Adri békeszerződést kötött matchával.",
+                n_suri_1: "Paramaribo piaca kifogyott a zöld porból.",
+                n_suri_2: "Hani szerint Suriname a jó hangulat hazája.",
+                n_richi: "Richi aranyérmet nyert Matcha Futár Olimpián.",
+                n_vn_1: "Hani végre megérkezett Vietnámba! A tea tökéletes.",
+                n_vn_2: "Hanoi forgalma leállt az óriás tea parádé miatt.",
+                n_lili: "Lili fejlődött. Klónozta magát az éjszakai műszakra.",
+                n_lili_2: "Vevők zavartak a sok Lilitől. 'Csak gyors vagyok' - mondja.",
+                n_lucky: "Szerencsés Bácsi: 'Tegyél mindent a Zöldre!'",
+                n_cat: "A macska véletlenül rendelt 5000kg halat.",
+                n_bao: "Bao talált valamit. A medal volt az!",
+                n_boss: "Hanit megválasztották a Matcha NGO elnökének.",
+                n_sci: "A tudósok szerint a világ 70% víz, 30% matcha.",
+                n_blackhole: "Hani véletlenül létrehozott egy íz fekete lyukat.",
+                n_save: "A valóság mentési pontot készít, mert túl jó a tea.",
+                n_aliens: "Űrlények szálltak le, a 'Zöld Cuccot' kérik.",
+                n_earth: "A FÖLD ZÖLD."
+            },
+            nl: {
+                intro_title: "Hani's Kerst Matcha", intro_text: "Het is Kerstmis! Hani wil de wereld verwarmen met ECHTE Matcha. Pak de Legendarische Garde en begin!",
+                tut_title: "HOE TE SPELEN", tut_1: "1. KLIK op de Matcha.", tut_2: "2. KOOP gebouwen & upgrades.", tut_3: "3. REIS de wereld rond!",
+                currency: "MATCHA'S", tab_buildings: "Gebouwen", tab_upgrades: "Upgrades", tab_passport: "Paspoort", welcome: "Welkom",
+                hover_info: "Beweeg over items voor details.", buy_upgrades: "Koop upgrades voor meer productie!", curr_loc: "Huidige Locatie",
+                passives: "Actieve Passives", goal_prefix: "VOLGEND DOEL:", goal_global: "WERELD DOMINATIE!", ui_menu: "MENU", ui_map: "KAART", ui_stats: "STATISTIEKEN", ui_lang: "TAAL", ui_resume: "DOORGAAN", ui_reset: "RESETTEN", ui_close: "SLUITEN", ui_news: "NIEUWS", ui_worldmap: "WERELD KAART", ui_stats_title: "Café Statistieken", ui_replay: "INTRO OPNIEUW",
+                btn_start: "START", btn_letsgo: "GAAN!", btn_nice: "LEUK", btn_readmore: "LEES MEER", btn_yes: "JA", btn_no: "NEE", news_sub: "DE MATCHA KRONIEKEN", scene_label: "HANI'S CAFÉ VLOER (STATS)", loc_new: "NIEUW LAND!", loc_arrived: "Je bent aangekomen.",
+                reset_confirm: "Weet je het zeker?", reset_desc: "Dit wist je voortgang.",
+                
+                b0_n: "Bamboe Garde", b0_d: "Sneller kloppen.", b0_n_t2: "Robo-Arm", b0_d_t2: "Industriële automatisering.", b0_n_t3: "Kwantum Garde", b0_d_t3: "Kloppen op subatomair niveau.",
+                b1_n: "Lili (Zus)", b1_d: "Ze helpt mee!", b1_n_t2: "Manager Lili", b1_d_t2: "Ze runt de tent.", b1_n_t3: "CEO Lili", b1_d_t3: "Ze runt de wereld.",
+                b2_n: "Plastic Stoel", b2_d: "Meer zitplaatsen!", b2_n_t2: "Fluwelen Bank", b2_d_t2: "Luxe zitplaatsen.", b2_n_t3: "Gouden Troon", b2_d_t3: "Zitplaats voor koningen.",
+                b3_n: "Bezorgvloot", b3_d: "Overal motors.", b3_n_t2: "Matcha Drones", b3_d_t2: "Thee via de lucht.", b3_n_t3: "Teleporters", b3_d_t3: "Directe thee transmissie.",
+                b4_n: "Da Lat Theeberg", b4_d: "Vers uit de bergen.", b4_n_t2: "Bio-Plantage", b4_d_t2: "Genetisch perfect.", b4_n_t3: "Matcha Golem", b4_d_t3: "Levende thee bewakers.",
+                b5_n: "Matcha Lab", b5_d: "Smaakwetenschap.", b5_n_t2: "Smaak Reactor", b5_d_t2: "Atoom niveau smaak.", b5_n_t3: "Smaak Singulariteit", b5_d_t3: "Smaak zo dicht dat licht niet ontsnapt.",
+                b6_n: "Matcha NGO", b6_d: "Goede doelen thee.", b6_n_t2: "Wereld Vrede Org", b6_d_t2: "Thee brengt vrede.", b6_n_t3: "Galactische Senaat", b6_d_t3: "Universele harmonie.",
+                b7_n: "Geesten Portaal", b7_d: "Roep de Matcha Goden.", b7_n_t2: "Realiteit Scheur", b7_d_t2: "Thee uit de 5e dimensie.", b7_n_t3: "Oerknal Brouwer", b7_d_t3: "Thee universums maken.",
+
+                loc_0: "Hongarije", loc_w_0: "Kerstmarkt Boedapest! Koude lucht, hete thee.",
+                loc_1: "Spanje", loc_w_1: "Hola! Hani serveert nu Matcha Tapas.",
+                loc_2: "Nederland", loc_w_2: "Amsterdam! Stroopwafels en Matcha.",
+                loc_3: "VK", loc_w_3: "Londen roept! Ruil Earl Grey voor Matcha.",
+                loc_4: "Guyana", loc_w_4: "Welkom in Guyana! Land van veel water... en nu Matcha!",
+                loc_5: "Suriname", loc_w_5: "Suriname! Prachtige natuur en krachtige thee.",
+                loc_6: "VS", loc_w_6: "VS! Land van kansen en ijskoude matcha lattes.",
+                loc_7: "Vietnam", loc_w_7: "Oost west, thuis best! Het Ultieme Hoofdkwartier.",
+                loc_8: "Matcha Aarde", loc_w_8: "Je hebt de planeet veroverd. De wereld is groen.",
+
+                u_condensed_milk: "Gecondenseerde Melk", u_condensed_milk_d: "Kliks x2",
+                u_dylan: "Dylan (Vriend)", u_dylan_d: "Auto-Klik elke 10s",
+                u_spoon: "Matcha Lepel", u_spoon_d: "Klik geeft 5% van MPS",
+                u_barni: "Barni (Artiest)", u_barni_d: "Barni schildert! Global +20%",
+                u_lucky: "Oom Lucky", u_lucky_d: "10% Kans op 2x Klik",
+                u_modeling: "Modellencontract", u_modeling_d: "Lili is beroemd! Lili x2",
+                u_vini: "Dagelijks belletje Vini", u_vini_d: "Broederlijke motivatie! x1.3",
+                u_naomi: "Naomi's Toverbal", u_naomi_d: "Toekomst is helder! +10% Crit",
+                u_richi: "Richi's Sprint", u_richi_d: "Snelle bezorging! Vloot x2",
+                u_orsidia: "BFF Orsi & Dia", u_orsidia_d: "Besties steun! x1.4",
+                u_bao: "Bao's Ontdekking", u_bao_d: "Medaille gevonden! Klik x1.25",
+                u_adri: "Adri's Vrede", u_adri_d: "Guyana & Suriname herenigd! x2.0",
+                u_cat: "Winkel Kat", u_cat_d: "Schattig! x1.1",
+                u_boss_woman: "Baas Vrouw", u_boss_woman_d: "Hani runt een NGO. x1.5",
+                u_fertilizer: "Bio Mest", u_fertilizer_d: "Theeberg x2",
+                u_nguyen: "Alles is Nguyen", u_nguyen_d: "Winnen! x1.5",
+                u_trade_deal: "VN-JP Handel", u_trade_deal_d: "Grote Zaken! x1.5",
+
+                n_start_1: "Hani doet paprika in de matcha. Hongaren in de war.",
+                n_start_2: "Lokale bewoner: 'Is dit soep?'",
+                n_matchyar: "Breaking: Hongarije heet nu 'Matcharije'.",
+                n_spain_1: "Hani danst Flamenco met een garde.",
+                n_spain_2: "Siësta afgelast, te veel cafeïne.",
+                n_nl_1: "Nederlands nieuws: Groene thee stroopwafels zijn de nieuwe rage.",
+                n_nl_2: "Amsterdams kanaal kleurt groen... Hani verdacht.",
+                n_uk_1: "De Koningin gespot met Hani's Speciale Mix.",
+                n_uk_2: "Londense mist is eigenlijk matcha stoom.",
+                n_guyana: "Hani verkent Kaieteur watervallen met thee.",
+                n_adri: "Adri onderhandelt vredesverdrag met matcha.",
+                n_suri_1: "Paramaribo markt uitverkocht van groen poeder.",
+                n_suri_2: "Hani zegt dat Suriname goede vibes heeft.",
+                n_richi: "Richi wint goud op Matcha Bezorg Olympische Spelen.",
+                n_vn_1: "Hani eindelijk in Vietnam! De thee is perfect.",
+                n_vn_2: "Hanoi verkeer stopt voor gigantische theeparade.",
+                n_lili: "Lili is geëvolueerd. Ze heeft zichzelf gekloond.",
+                n_lucky: "Oom Lucky zegt: 'Alles op Groen!'",
+                n_cat: "Winkelkat bestelt per ongeluk 5000kg vis.",
+                n_bao: "Bao vond iets glimmends. Het was de medaille!",
+                n_sci: "Wetenschappers: wereld is 70% water, 30% matcha.",
+                n_blackhole: "Hani maakt per ongeluk een smaak zwart gat.",
+                n_save: "De realiteit maakt een opslagpunt.",
+                n_aliens: "Aliens landen, vragen om 'Het Groene Spul'.",
+                n_earth: "AARDE IS GROEN."
+            },
+            vi: {
+                intro_title: "Hani's Holiday Matcha", intro_text: "Giáng sinh đã đến! Hani muốn mang Matcha THẬT đến với thế giới. Cầm lấy cây đánh trà huyền thoại và bắt đầu hành trình!",
+                tut_title: "CÁCH CHƠI", tut_1: "1. NHẤN vào ly Matcha.", tut_2: "2. MUA thiết bị & nâng cấp.", tut_3: "3. DU LỊCH vòng quanh thế giới!",
+                currency: "MATCHA", tab_buildings: "Cửa hàng", tab_upgrades: "Nâng cấp", tab_passport: "Hộ chiếu", welcome: "Chào mừng",
+                hover_info: "Di chuột để xem chi tiết.", buy_upgrades: "Mua nâng cấp để tăng tốc!", curr_loc: "Vị trí hiện tại",
+                passives: "Hiệu ứng", goal_prefix: "MỤC TIÊU:", goal_global: "THỐNG TRỊ TOÀN CẦU!", ui_menu: "MENU", ui_map: "BẢN ĐỒ", ui_stats: "THỐNG KÊ", ui_lang: "NGÔN NGỮ", ui_resume: "TIẾP TỤC", ui_reset: "XÓA SAVE", ui_close: "ĐÓNG", ui_news: "TIN TỨC", ui_worldmap: "BẢN ĐỒ THẾ GIỚI", ui_stats_title: "Thống kê", ui_replay: "XEM LẠI INTRO",
+                btn_start: "BẮT ĐẦU", btn_letsgo: "ĐI THÔI!", btn_nice: "TUYỆT", btn_readmore: "ĐỌC THÊM", btn_yes: "CÓ", btn_no: "KHÔNG", news_sub: "NHẬT KÝ MATCHA", scene_label: "SÀN CAFÉ (THỐNG KÊ)", loc_new: "QUỐC GIA MỚI!", loc_arrived: "Bạn đã đến nơi.",
+                reset_confirm: "Bạn có chắc không?", reset_desc: "Dữ liệu sẽ bị xóa.",
+
+                b0_n: "Cây đánh trà", b0_d: "Đánh nhanh hơn.", b0_n_t2: "Tay Robot", b0_d_t2: "Tự động hóa công nghiệp.", b0_n_t3: "Đánh Lượng Tử", b0_d_t3: "Cấp độ hạ nguyên tử.",
+                b1_n: "Lili (Em gái)", b1_d: "Em ấy giúp một tay!", b1_n_t2: "Quản lý Lili", b1_d_t2: "Em ấy quản lý quán.", b1_n_t3: "CEO Lili", b1_d_t3: "Em ấy quản lý thế giới.",
+                b2_n: "Ghế Nhựa", b2_d: "Thêm chỗ ngồi!", b2_n_t2: "Sofa Nhung", b2_d_t2: "Chỗ ngồi sang trọng.", b2_n_t3: "Ngai Vàng", b2_d_t3: "Ghế cho hoàng gia.",
+                b3_n: "Đội Giao Hàng", b3_d: "Xe máy khắp nơi.", b3_n_t2: "Flycam Matcha", b3_d_t2: "Giao hàng trên không.", b3_n_t3: "Dịch Chuyển", b3_d_t3: "Giao trà tức thì.",
+                b4_n: "Đồi Chè Đà Lạt", b4_d: "Tươi từ trên núi.", b4_n_t2: "Đồn Điền Bio", b4_d_t2: "Lá trà hoàn hảo.", b4_n_t3: "Người Đá Matcha", b4_d_t3: "Vệ thần trà.",
+                b5_n: "Phòng Lab", b5_d: "Khoa học vị giác.", b5_n_t2: "Lò Phản Ứng", b5_d_t2: "Vị cấp nguyên tử.", b5_n_t3: "Điểm Kỳ Dị", b5_d_t3: "Vị đậm đặc ánh sáng không thoát được.",
+                b6_n: "Matcha NGO", b6_d: "Từ thiện trà.", b6_n_t2: "Hòa Bình TG", b6_d_t2: "Trà mang lại hòa bình.", b6_n_t3: "Thượng Viện", b6_d_t3: "Hòa hợp vũ trụ.",
+                b7_n: "Cổng Linh Hồn", b7_d: "Triệu hồi Thần Trà.", b7_n_t2: "Khe Nứt", b7_d_t2: "Trà từ chiều không gian thứ 5.", b7_n_t3: "Big Bang", b7_d_t3: "Tạo ra vũ trụ trà.",
+
+                loc_0: "Hungary", loc_w_0: "Chợ Giáng Sinh Budapest! Lạnh nhưng trà nóng.",
+                loc_1: "Tây Ban Nha", loc_w_1: "Hola! Hani phục vụ Matcha Tapas.",
+                loc_2: "Hà Lan", loc_w_2: "Amsterdam! Bánh kẹp và Matcha.",
+                loc_3: "Anh", loc_w_3: "London gọi! Đổi trà Earl Grey lấy Matcha.",
+                loc_4: "Guyana", loc_w_4: "Chào mừng đến Guyana! Xứ sở nhiều nước... và giờ là Matcha!",
+                loc_5: "Suriname", loc_w_5: "Suriname! Thiên nhiên đẹp và trà mạnh.",
+                loc_6: "Mỹ", loc_w_6: "Mỹ! Miền đất hứa và matcha latte đá.",
+                loc_7: "Việt Nam", loc_w_7: "Về nhà rồi! Trụ sở chính Matcha.",
+                loc_8: "Trái Đất Matcha", loc_w_8: "Bạn đã chinh phục hành tinh. Thế giới màu xanh.",
+
+                u_condensed_milk: "Sữa Ông Thọ", u_condensed_milk_d: "Nhấn x2",
+                u_dylan: "Dylan (Bạn trai)", u_dylan_d: "Tự động nhấn mỗi 10s",
+                u_spoon: "Thìa Matcha", u_spoon_d: "Nhấn được 5% MPS",
+                u_barni: "Barni (Họa sĩ)", u_barni_d: "Barni vẽ! Toàn cầu +20%",
+                u_lucky: "Chú Lucky", u_lucky_d: "10% cơ hội nhấn x2",
+                u_modeling: "Hợp Đồng Mẫu", u_modeling_d: "Lili nổi tiếng! Lili x2",
+                u_vini: "Vini Gọi Điện", u_vini_d: "Động lực anh em! x1.3",
+                u_naomi: "Quả Cầu Naomi", u_naomi_d: "Tương lai sáng! +10% Chí mạng",
+                u_richi: "Richi Chạy Nhanh", u_richi_d: "Giao hàng siêu tốc! Đội xe x2",
+                u_orsidia: "BFF Orsi & Dia", u_orsidia_d: "Bạn thân ủng hộ! x1.4",
+                u_bao: "Bao Tìm Thấy", u_bao_d: "Tìm thấy huy chương! Nhấn x1.25",
+                u_adri: "Hòa Bình Adri", u_adri_d: "Hàn gắn Guyana & Suriname! x2.0",
+                u_cat: "Mèo Cửa Hàng", u_cat_d: "Dễ thương! x1.1",
+                u_boss_woman: "Nữ Chủ Tịch", u_boss_woman_d: "Hani điều hành NGO. x1.5",
+                u_fertilizer: "Phân Bón Hữu Cơ", u_fertilizer_d: "Đồi Chè x2",
+                u_nguyen: "Win Win Nguyen", u_nguyen_d: "Chiến thắng! x1.5",
+                u_trade_deal: "Thương Mại VN-JP", u_trade_deal_d: "Làm ăn lớn! x1.5",
+
+                n_start_1: "Hani thử cho ớt vào matcha. Người Hungary bối rối.",
+                n_start_2: "Dân Budapest: 'Đây là súp à?'",
+                n_matchyar: "Tin nóng: Hungary đổi tên thành 'Matchyar'.",
+                n_spain_1: "Hani nhảy Flamenco với cây đánh trà.",
+                n_spain_2: "Hủy giờ nghỉ trưa, quá nhiều caffeine trong không khí.",
+                n_nl_1: "Tin Hà Lan: Bánh stroopwafel trà xanh là mốt mới.",
+                n_nl_2: "Kênh đào Amsterdam chuyển màu xanh... Hani bị nghi ngờ.",
+                n_uk_1: "Nữ hoàng bị bắt gặp đang uống trà của Hani.",
+                n_uk_2: "Sương mù London thực ra là hơi nước matcha.",
+                n_guyana: "Hani thám hiểm thác Kaieteur với ly trà.",
+                n_adri: "Adri đàm phán hòa bình thành công bằng matcha.",
+                n_suri_1: "Chợ Paramaribo hết sạch bột xanh.",
+                n_suri_2: "Hani nói Suriname gợi nhớ những rung cảm tốt đẹp.",
+                n_richi: "Richi giành huy chương vàng Olympic Giao Trà.",
+                n_vn_1: "Hani cuối cùng cũng đến Việt Nam! Trà ngon tuyệt.",
+                n_vn_2: "Giao thông Hà Nội dừng lại vì diễu hành trà khổng lồ.",
+                n_lili: "Lili đã tiến hóa. Cô ấy nhân bản để làm ca đêm.",
+                n_lili_2: "Khách bối rối vì thấy nhiều Lili. 'Em nhanh thôi' - cô nói.",
+                n_lucky: "Chú Lucky bảo: 'Đặt hết vào màu Xanh!'",
+                n_cat: "Mèo vô tình đặt mua 5000kg cá.",
+                n_bao: "Bao tìm thấy vật sáng. Đó là huy chương bị mất!",
+                n_sci: "Khoa học: thế giới là 70% nước, 30% matcha.",
+                n_blackhole: "Hani vô tình tạo ra hố đen hương vị.",
+                n_save: "Thực tại tạo điểm lưu vì trà quá ngon.",
+                n_aliens: "Người ngoài hành tinh đáp xuống, hỏi xin 'Thứ Màu Xanh'.",
+                n_earth: "TRÁI ĐẤT MÀU XANH."
+            }
         };
         
         let currentLang = 'en';
+        let gameStarted = false;
 
         function getText(key) {
-            // Check current lang, then fallback to EN, then fallback to key itself
             if (LANG[currentLang] && LANG[currentLang][key]) return LANG[currentLang][key];
             if (LANG['en'][key]) return LANG['en'][key];
             return key;
@@ -614,9 +846,13 @@
 
         function setLanguage(lang) {
             currentLang = lang;
-            document.getElementById('language-overlay').style.display = 'none';
-            document.getElementById('intro-overlay').style.display = 'flex';
             
+            // Only hide lang select if game hasn't started
+            if (!gameStarted && document.getElementById('language-overlay').style.display !== 'none') {
+                document.getElementById('language-overlay').style.display = 'none';
+                document.getElementById('intro-overlay').style.display = 'flex';
+            }
+
             // Safe DOM updates
             const setTitle = (id, key) => { const el = document.getElementById(id); if(el) el.innerText = getText(key); };
             const setHTML = (id, key) => { const el = document.getElementById(id); if(el) el.innerHTML = getText(key).replace('\n', '<br>'); };
@@ -629,9 +865,11 @@
                 el.innerText = getText(el.getAttribute('data-i18n'));
             });
 
-            setHTML('tut-step-1', 'tut_1');
-            setHTML('tut-step-2', 'tut_2');
-            setHTML('tut-step-3', 'tut_3');
+            if(document.getElementById('tut-step-1')) {
+                document.getElementById('tut-step-1').innerHTML = getText('tut_1');
+                document.getElementById('tut-step-2').innerHTML = getText('tut_2');
+                document.getElementById('tut-step-3').innerHTML = getText('tut_3');
+            }
 
             // Force refresh of UI components
             updateUI();
@@ -648,6 +886,12 @@
         function showTutorial() {
             document.getElementById('intro-overlay').style.display = 'none';
             document.getElementById('tutorial-overlay').style.display = 'flex';
+        }
+
+        function replayIntro() {
+            document.getElementById('menu-overlay').style.display = 'none';
+            document.getElementById('intro-overlay').style.display = 'flex';
+            // Note: pressing Start/Lets Go here will just close overlays without re-init
         }
         
         function showResetConfirm() {
@@ -1216,7 +1460,6 @@
             container.innerHTML = `<p><strong>Total:</strong> ${Math.floor(state.total).toLocaleString()}</p><p><strong>MPS:</strong> ${mps.toFixed(1)}</p><hr>${bHtml}`;
         }
 
-        /* --- GAME LOGIC --- */
         function addRes(n) {
             state.res += n; state.total += n;
             document.getElementById('resource-count').innerText = Math.floor(state.res).toLocaleString();
@@ -1413,12 +1656,13 @@
 
         function startGame() { 
             document.getElementById('tutorial-overlay').style.display = 'none'; 
+            gameStarted = true;
             initAudio(); 
         }
         
         function closeLocPopup() { document.getElementById('location-popup').style.display = 'none'; }
         function save() { localStorage.setItem('haniVibrantSave', JSON.stringify(state)); }
-        function load() { const d = localStorage.getItem('haniVibrantSave'); if(d) { const saved = JSON.parse(d); state = {...state, ...saved}; } }
+        function load() { const d = localStorage.getItem('haniVibrantSave'); if(d) { const saved = JSON.parse(d); state = {...state, ...saved}; gameStarted = true; } }
         function resetGame() { localStorage.removeItem('haniVibrantSave'); location.reload(); }
 
         function initAudio() { if(!audioCtx) { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); startMusic(); } else if(audioCtx.state==='suspended') audioCtx.resume(); }
