@@ -356,6 +356,7 @@
             <button class="pixel-btn" onclick="toggleStats()" data-i18n="ui_stats">📊 STATS</button>
             <br>
             <button class="pixel-btn" onclick="replayIntro()" data-i18n="ui_replay">REPLAY INTRO</button>
+            <button class="pixel-btn" onclick="manualSave()" data-i18n="ui_save">SAVE GAME</button>
             <div style="margin: 10px 0; border: 1px dashed #000; padding: 10px;">
                 <p style="margin:0 0 5px 0; font-size:1rem;" data-i18n="ui_lang">LANGUAGE</p>
                 <button class="pixel-btn small" onclick="setLanguage('en')">EN</button>
@@ -523,7 +524,7 @@
                 goal_prefix: "NEXT GOAL:",
                 goal_global: "GLOBAL DOMINATION!",
                 ui_menu: "MENU", ui_map: "🗺️ VIEW MAP", ui_worldmap: "WORLD TOUR MAP", ui_stats: "📊 STATISTICS", ui_stats_title: "Café Statistics", ui_lang: "LANGUAGE", ui_resume: "RESUME", ui_reset: "RESET SAVE", ui_close: "CLOSE", ui_news: "NEWS",
-                ui_replay: "REPLAY INTRO",
+                ui_replay: "REPLAY INTRO", ui_save: "SAVE GAME", msg_saved: "GAME SAVED!",
                 btn_start: "START", btn_letsgo: "LET'S GO!", btn_nice: "NICE", btn_readmore: "READ MORE", btn_yes: "YES", btn_no: "NO",
                 news_sub: "THE MATCHA CHRONICLES", scene_label: "HANI'S CAFÉ FLOOR (STATS)", loc_new: "NEW COUNTRY!", loc_arrived: "You have arrived.", reset_confirm: "Are you sure?", reset_desc: "This will wipe your save.",
                 stat_building: "Building", stat_owned: "Owned", stat_total_gen: "Total Generated", stat_total_matcha: "Total Matcha Produced:", stat_current_mps: "Current MPS:", stat_output: "Building Output", stat_collection: "Collection",
@@ -620,7 +621,7 @@
                 tut_title: "HOGYAN JÁTSSZ", tut_1: "1. KATTINTS a nagy Matchára.", tut_2: "2. VÁSÁROLJ fejlesztéseket.", tut_3: "3. UTAZD be a világot!",
                 currency: "MATCHA", tab_buildings: "Épületek", tab_upgrades: "Extrák", tab_passport: "Útlevél", welcome: "Üdvözöllek",
                 hover_info: "Vidd rá az egeret a részletekért.", buy_upgrades: "Vegyél extrákat a termeléshez!", curr_loc: "Jelenlegi Hely",
-                passives: "Aktív Hatások", goal_prefix: "KÖVETKEZŐ CÉL:", goal_global: "VILÁGURALOM!", ui_menu: "MENÜ", ui_map: "TÉRKÉP", ui_stats: "STATISZTIKA", ui_lang: "NYELV", ui_resume: "FOLYTATÁS", ui_reset: "MENTÉS TÖRLÉSE", ui_close: "BEZÁR", ui_news: "HÍREK", ui_worldmap: "VILÁG TÉRKÉP", ui_stats_title: "Kávézó Statisztikák", ui_replay: "INTRO ÚJRAJÁTSZÁSA",
+                passives: "Aktív Hatások", goal_prefix: "KÖVETKEZŐ CÉL:", goal_global: "VILÁGURALOM!", ui_menu: "MENÜ", ui_map: "TÉRKÉP", ui_stats: "STATISZTIKA", ui_lang: "NYELV", ui_resume: "FOLYTATÁS", ui_reset: "MENTÉS TÖRLÉSE", ui_close: "BEZÁR", ui_news: "HÍREK", ui_worldmap: "VILÁG TÉRKÉP", ui_stats_title: "Kávézó Statisztikák", ui_replay: "INTRO ÚJRAJÁTSZÁSA", ui_save: "JÁTÉK MENTÉSE", msg_saved: "JÁTÉK MENTVE!",
                 btn_start: "INDÍTÁS", btn_letsgo: "GYERÜNK!", btn_nice: "SZUPER", btn_readmore: "OLVASS TOVÁBB", btn_yes: "IGEN", btn_no: "NEM", news_sub: "A MATCHA KRÓNIKÁK", scene_label: "HANI KÁVÉZÓJA (STATS)", loc_new: "ÚJ ORSZÁG!", loc_arrived: "Megérkeztél.",
                 reset_confirm: "Biztos vagy benne?", reset_desc: "Minden eddigi haladás törlődik.",
                 stat_building: "Épület", stat_owned: "Birtokolt", stat_total_gen: "Összesen Termelt", stat_total_matcha: "Összes Matcha:", stat_current_mps: "Jelenlegi MPS:", stat_output: "Épület Termelés", stat_collection: "Gyűjtemény",
@@ -717,7 +718,7 @@
                 tut_title: "HOE TE SPELEN", tut_1: "1. KLIK op de Matcha.", tut_2: "2. KOOP gebouwen & upgrades.", tut_3: "3. REIS de wereld rond!",
                 currency: "MATCHA'S", tab_buildings: "Gebouwen", tab_upgrades: "Upgrades", tab_passport: "Paspoort", welcome: "Welkom",
                 hover_info: "Beweeg over items voor details.", buy_upgrades: "Koop upgrades voor meer productie!", curr_loc: "Huidige Locatie",
-                passives: "Actieve Passives", goal_prefix: "VOLGEND DOEL:", goal_global: "WERELD DOMINATIE!", ui_menu: "MENU", ui_map: "KAART", ui_stats: "STATISTIEKEN", ui_lang: "TAAL", ui_resume: "DOORGAAN", ui_reset: "RESETTEN", ui_close: "SLUITEN", ui_news: "NIEUWS", ui_worldmap: "WERELD KAART", ui_stats_title: "Café Statistieken", ui_replay: "INTRO OPNIEUW",
+                passives: "Actieve Passives", goal_prefix: "VOLGEND DOEL:", goal_global: "WERELD DOMINATIE!", ui_menu: "MENU", ui_map: "KAART", ui_stats: "STATISTIEKEN", ui_lang: "TAAL", ui_resume: "DOORGAAN", ui_reset: "RESETTEN", ui_close: "SLUITEN", ui_news: "NIEUWS", ui_worldmap: "WERELD KAART", ui_stats_title: "Café Statistieken", ui_replay: "INTRO OPNIEUW", ui_save: "SPEL OPSLAAN", msg_saved: "SPEL OPGESLAGEN!",
                 btn_start: "START", btn_letsgo: "GAAN!", btn_nice: "LEUK", btn_readmore: "LEES MEER", btn_yes: "JA", btn_no: "NEE", news_sub: "DE MATCHA KRONIEKEN", scene_label: "HANI'S CAFÉ VLOER (STATS)", loc_new: "NIEUW LAND!", loc_arrived: "Je bent aangekomen.",
                 reset_confirm: "Weet je het zeker?", reset_desc: "Dit wist je voortgang.",
                 stat_building: "Gebouw", stat_owned: "Bezit", stat_total_gen: "Totaal Gegenereerd", stat_total_matcha: "Totaal Matcha:", stat_current_mps: "Huidige MPS:", stat_output: "Gebouw Productie", stat_collection: "Collectie",
@@ -814,7 +815,7 @@
                 tut_title: "CÁCH CHƠI", tut_1: "1. NHẤN vào ly Matcha.", tut_2: "2. MUA thiết bị & nâng cấp.", tut_3: "3. DU LỊCH vòng quanh thế giới!",
                 currency: "MATCHA", tab_buildings: "Cửa hàng", tab_upgrades: "Nâng cấp", tab_passport: "Hộ chiếu", welcome: "Chào mừng",
                 hover_info: "Di chuột để xem chi tiết.", buy_upgrades: "Mua nâng cấp để tăng tốc!", curr_loc: "Vị trí hiện tại",
-                passives: "Hiệu ứng", goal_prefix: "MỤC TIÊU:", goal_global: "THỐNG TRỊ TOÀN CẦU!", ui_menu: "MENU", ui_map: "BẢN ĐỒ", ui_stats: "THỐNG KÊ", ui_lang: "NGÔN NGỮ", ui_resume: "TIẾP TỤC", ui_reset: "XÓA SAVE", ui_close: "ĐÓNG", ui_news: "TIN TỨC", ui_worldmap: "BẢN ĐỒ THẾ GIỚI", ui_stats_title: "Thống kê", ui_replay: "XEM LẠI INTRO",
+                passives: "Hiệu ứng", goal_prefix: "MỤC TIÊU:", goal_global: "THỐNG TRỊ TOÀN CẦU!", ui_menu: "MENU", ui_map: "BẢN ĐỒ", ui_stats: "THỐNG KÊ", ui_lang: "NGÔN NGỮ", ui_resume: "TIẾP TỤC", ui_reset: "XÓA SAVE", ui_close: "ĐÓNG", ui_news: "TIN TỨC", ui_worldmap: "BẢN ĐỒ THẾ GIỚI", ui_stats_title: "Thống kê", ui_replay: "XEM LẠI INTRO", ui_save: "LƯU GAME", msg_saved: "ĐÃ LƯU!",
                 btn_start: "BẮT ĐẦU", btn_letsgo: "ĐI THÔI!", btn_nice: "TUYỆT", btn_readmore: "ĐỌC THÊM", btn_yes: "CÓ", btn_no: "KHÔNG", news_sub: "NHẬT KÝ MATCHA", scene_label: "SÀN CAFÉ (THỐNG KÊ)", loc_new: "QUỐC GIA MỚI!", loc_arrived: "Bạn đã đến nơi.",
                 reset_confirm: "Bạn có chắc không?", reset_desc: "Dữ liệu sẽ bị xóa.",
                 stat_building: "Công trình", stat_owned: "Sở hữu", stat_total_gen: "Tổng tạo ra", stat_total_matcha: "Tổng Matcha:", stat_current_mps: "MPS hiện tại:", stat_output: "Sản lượng", stat_collection: "Bộ sưu tập",
@@ -883,6 +884,8 @@
                 n_lili: "Lili đã tiến hóa. Cô ấy nhân bản để làm ca đêm.",
                 n_lili_2: "Khách bối rối vì thấy nhiều Lili. 'Em nhanh thôi' - cô nói.",
                 n_lucky: "Chú Lucky bảo: 'Đặt hết vào màu Xanh!'",
+                n_naomi: "Naomi dự đoán lợi nhuận cao.",
+                n_orsi: "Orsi & Dia đánh giá 5 sao khắp nơi.",
                 n_cat: "Mèo vô tình đặt mua 5000kg cá.",
                 n_bao: "Bao tìm thấy vật sáng. Đó là huy chương bị mất!",
                 n_boss: "Hani được bầu làm chủ tịch NGO Matcha.",
@@ -965,6 +968,14 @@
             // Note: pressing Start/Lets Go here will just close overlays without re-init
         }
         
+        function manualSave() {
+            save();
+            const btn = document.querySelector('button[data-i18n="ui_save"]');
+            const originalText = btn.innerText;
+            btn.innerText = getText('msg_saved');
+            setTimeout(() => btn.innerText = originalText, 2000);
+        }
+
         function showResetConfirm() {
             document.getElementById('reset-overlay').style.display = 'flex';
             document.getElementById('menu-overlay').style.display = 'none';
