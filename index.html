@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Hani's World Tour Matcha Café</title>
-    <!-- Pixel Font -->
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <!-- Pixel Font & Noto Color Emoji (Fallback for non-Windows) -->
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Noto+Color+Emoji&display=swap" rel="stylesheet">
     <style>
         :root {
             /* DYNAMIC PALETTE (Default: Hungary/Christmas) */
@@ -33,7 +33,8 @@
             background-size: 40px 40px;
             background-position: 0 0, 20px 20px;
             color: var(--text-color);
-            font-family: 'VT323', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+            /* Priority: Windows 11 -> Google Noto (Universal) -> System */
+            font-family: 'VT323', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
             height: 100vh;
             width: 100vw;
             overflow: hidden;
