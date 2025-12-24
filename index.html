@@ -288,23 +288,132 @@
 
         /* --- MOBILE RESPONSIVE --- */
         @media (max-width: 768px) {
-            #game-container { flex-direction: column; }
-            .left-panel { flex: 1; min-height: 40%; min-width: 100%; padding: 5px; }
-            .right-panel { flex: 1.5; height: auto; min-width: 100%; }
-            #click-btn-container { width: 180px; height: 180px; }
-            #click-btn { width: 140px; height: 140px; font-size: 4rem; }
-            #dylan-sprite { margin-top: -60px; font-size: 2.5rem; } 
-            #heart-sprite { margin-top: -80px; font-size: 2rem; }
-            #resource-count { font-size: 3rem; margin-top: 0; }
-            #resource-display { margin-top: 10px; margin-bottom: 10px; }
-            .modal-box { padding: 15px; width: 95%; }
-            .modal-box h1 { font-size: 2rem; }
-            .pixel-map { width: 100%; aspect-ratio: 2/1; height: auto; }
-            #cafe-scene { height: 120px; }
-            #info-panel { height: 70px; }
-            #info-icon-container { width: 40px; height: 40px; font-size: 2rem; }
+            #game-container { 
+                flex-direction: column; 
+                padding: 5px;
+                padding-bottom: env(safe-area-inset-bottom); /* Safe area for iPhone home bar */
+            }
+            
+            /* PORTRAIT MODE OPTIMIZATIONS */
+            .left-panel { 
+                flex: 0 0 auto; /* Don't stretch, just fit content */
+                width: 100%; 
+                padding: 10px;
+                margin-bottom: 5px;
+                min-height: auto;
+                display: flex;
+                flex-direction: row; /* Side-by-side layout for top panel */
+                align-items: center;
+                justify-content: space-around;
+                gap: 10px;
+            }
+
+            /* Re-arrange Left Panel for Mobile Portrait */
+            .left-panel > * { margin: 0 !important; } /* Reset margins */
+            
+            #menu-btn { position: static; order: 1; font-size: 1.5rem; padding: 5px 10px; }
+            
+            #click-btn-container { 
+                width: 100px; height: 100px; 
+                order: 2; 
+            }
+            #click-btn { width: 90px; height: 90px; font-size: 3rem; border-width: 4px; }
+            
+            .resource-display { 
+                width: auto; 
+                padding: 5px; 
+                border: none; 
+                box-shadow: none; 
+                background: transparent;
+                text-align: left;
+                order: 3;
+                flex: 1;
+            }
+            #resource-count { font-size: 2.2rem; text-align: right; }
+            #rps-display { font-size: 1rem; text-align: right; }
+            #active-rps { display: none; } /* Hide floating text on mobile header to save space */
+            
+            .progress-container { display: none; } /* Hide goal bar in header, maybe move to bottom? */
+
+            /* RIGHT PANEL (List) */
+            .right-panel { 
+                flex: 1; 
+                width: 100%; 
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            #cafe-scene { height: 100px; min-height: 100px; }
             .bouncing-sprite { font-size: 1.5rem; }
+            
+            #info-panel { height: 60px; padding: 2px; }
+            #info-icon-container { width: 35px; height: 35px; font-size: 1.5rem; }
+            #info-title { font-size: 1rem; }
+            #info-desc { font-size: 0.8rem; }
+            
+            .tabs-header { height: 35px; }
+            .tab-btn { font-size: 1rem; }
+            
+            .shop-item { padding: 5px; margin-bottom: 5px; }
+            .item-icon { font-size: 1.5rem; width: 30px; }
+            .item-details h3 { font-size: 1rem; }
+            .item-cost { font-size: 0.9rem; }
         }
+
+        /* LANDSCAPE MOBILE OPTIMIZATIONS */
+        @media (max-height: 500px) and (orientation: landscape) {
+            #game-container { 
+                flex-direction: row; 
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+            }
+            
+            .left-panel {
+                flex-direction: column;
+                width: 220px;
+                flex: 0 0 220px;
+                height: 100%;
+                justify-content: center;
+                gap: 5px;
+            }
+            
+            #menu-btn { position: absolute; top: 5px; left: 5px; }
+            #click-btn-container { width: 120px; height: 120px; margin: 0 auto; }
+            #click-btn { width: 100px; height: 100px; font-size: 3.5rem; }
+            
+            .resource-display { text-align: center; width: 100%; }
+            #resource-count { text-align: center; font-size: 2.5rem; }
+            #rps-display { text-align: center; }
+            
+            .right-panel { flex: 1; }
+            #cafe-scene { display: none; } /* Hide scene in landscape to maximize list view */
+        }
+
+        /* VOLUME CONTROLS */
+        .vol-control { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 10px 0; }
+        .vol-block { 
+            width: 30px; height: 30px; 
+            background: #555; 
+            border: 2px solid black; 
+            cursor: pointer; 
+            display: inline-block;
+        }
+        .vol-block.active { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+        
+        /* CHECKBOX STYLE */
+        .pixel-checkbox {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            font-size: 1.5rem; cursor: pointer; margin: 10px 0;
+        }
+        .p-check-box {
+            width: 30px; height: 30px; background: white; border: 3px solid black;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .p-check-box::after {
+            content: "X"; font-weight: bold; display: none; color: black;
+        }
+        .pixel-checkbox.checked .p-check-box::after { display: block; }
 
     </style>
 </head>
@@ -349,8 +458,28 @@
     <div id="menu-overlay">
         <div class="modal-box">
             <h1 data-i18n="ui_menu">MENU</h1>
-            <button class="pixel-btn" id="mute-btn-menu" onclick="toggleAudio()">🔊 SOUND ON</button>
-            <br>
+            
+            <!-- VOLUME CONTROL -->
+            <div style="margin-bottom: 15px;">
+                <p style="margin:0; font-size:1.2rem;">VOLUME</p>
+                <div class="vol-control">
+                    <div class="vol-block" onclick="setVolume(1)" id="vol-1"></div>
+                    <div class="vol-block" onclick="setVolume(2)" id="vol-2"></div>
+                    <div class="vol-block" onclick="setVolume(3)" id="vol-3"></div>
+                    <div class="vol-block" onclick="setVolume(4)" id="vol-4"></div>
+                    <div class="vol-block" onclick="setVolume(5)" id="vol-5"></div>
+                </div>
+                <button class="pixel-btn small" id="mute-btn-menu" onclick="toggleMute()">🔊 ON</button>
+            </div>
+
+            <!-- FULLSCREEN TOGGLE -->
+            <div class="pixel-checkbox" id="fs-toggle" onclick="toggleFullscreen()">
+                <div class="p-check-box"></div>
+                <span>FULLSCREEN</span>
+            </div>
+
+            <hr>
+
             <button class="pixel-btn" onclick="toggleMap()" data-i18n="ui_map">🗺️ MAP</button>
             <br>
             <button class="pixel-btn" onclick="toggleStats()" data-i18n="ui_stats">📊 STATS</button>
@@ -1765,12 +1894,75 @@
         function load() { const d = localStorage.getItem('haniVibrantSave'); if(d) { const saved = JSON.parse(d); state = {...state, ...saved}; gameStarted = true; } }
         function resetGame() { localStorage.removeItem('haniVibrantSave'); location.reload(); }
 
-        function initAudio() { if(!audioCtx) { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); startMusic(); } else if(audioCtx.state==='suspended') audioCtx.resume(); }
-        function playTone(freq,type,dur,vol) { if(isMuted||!audioCtx)return; const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+dur);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur); }
+        function initAudio() { 
+            if(!audioCtx) { 
+                audioCtx = new (window.AudioContext||window.webkitAudioContext)(); 
+                startMusic(); 
+            } else if(audioCtx.state==='suspended') {
+                audioCtx.resume(); 
+            }
+            updateVolumeUI();
+        }
+
+        let volumeLevel = 3; // 1-5
+
+        function setVolume(n) {
+            volumeLevel = n;
+            if(isMuted && n > 0) toggleMute(); // Unmute if setting volume
+            updateVolumeUI();
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            updateVolumeUI();
+            if(!isMuted && audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function updateVolumeUI() {
+            for(let i=1; i<=5; i++) {
+                const el = document.getElementById(`vol-${i}`);
+                if(i <= volumeLevel && !isMuted) el.classList.add('active');
+                else el.classList.remove('active');
+            }
+            document.getElementById('mute-btn-menu').innerText = isMuted ? "🔇 OFF" : "🔊 ON";
+        }
+
+        function toggleFullscreen() {
+            const el = document.documentElement;
+            const check = document.getElementById('fs-toggle');
+            
+            if (!document.fullscreenElement) {
+                if(el.requestFullscreen) el.requestFullscreen();
+                else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen(); // Safari
+                check.classList.add('checked');
+            } else {
+                if(document.exitFullscreen) document.exitFullscreen();
+                else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+                check.classList.remove('checked');
+            }
+        }
+
+        function playTone(freq,type,dur,vol) { 
+            if(isMuted||!audioCtx)return; 
+            
+            // Apply volume level (1-5)
+            const masterVol = vol * (volumeLevel / 5);
+            
+            const o=audioCtx.createOscillator();
+            const g=audioCtx.createGain();
+            o.type=type;
+            o.frequency.setValueAtTime(freq,audioCtx.currentTime);
+            g.gain.setValueAtTime(masterVol,audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+dur);
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start();
+            o.stop(audioCtx.currentTime+dur); 
+        }
         function startMusic() { if(musicTimer) clearInterval(musicTimer); const notes = CONFIG.locations[state.loc].music; noteIndex = 0; musicTimer = setInterval(() => { if(!isMuted && audioCtx && audioCtx.state === 'running') { playTone(notes[noteIndex], 'triangle', 0.3, 0.05); noteIndex = (noteIndex + 1) % notes.length; } }, 400); }
         function sfxClick() { if(!audioCtx)initAudio(); playTone(880,'sine',0.1,0.1); }
         function sfxBuy() { if(!audioCtx)initAudio(); playTone(1046,'square',0.1,0.05); setTimeout(()=>playTone(1318,'square',0.2,0.05),100); }
-        function toggleAudio() { isMuted=!isMuted; document.getElementById('mute-btn-menu').innerText=isMuted?"🔇 SOUND OFF":"🔊 SOUND ON"; if(!isMuted&&audioCtx&&audioCtx.state==='suspended') audioCtx.resume(); }
+        // function toggleAudio() removed in favor of toggleMute
 
         init();
     </script>
