@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Hani's World Tour Matcha Café</title>
-    <!-- Pixel Font -->
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <!-- Pixel Font & Emoji Font -->
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Noto+Color+Emoji&display=swap" rel="stylesheet">
     <style>
         :root {
             /* DYNAMIC PALETTE (Default: Hungary/Christmas) */
@@ -33,7 +33,7 @@
             background-size: 40px 40px;
             background-position: 0 0, 20px 20px;
             color: var(--text-color);
-            font-family: 'VT323', monospace;
+            font-family: 'VT323', 'Noto Color Emoji', 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif;
             height: 100vh;
             width: 100vw;
             overflow: hidden;
@@ -303,45 +303,52 @@
                 padding: 10px;
                 margin-bottom: 5px;
                 min-height: auto;
-                display: flex;
-                flex-direction: row; /* Side-by-side layout for top panel */
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto auto;
                 align-items: center;
-                justify-content: space-around;
                 gap: 10px;
             }
 
             /* Re-arrange Left Panel for Mobile Portrait */
             .left-panel > * { margin: 0 !important; } /* Reset margins */
             
-            #menu-btn { position: static; order: 1; font-size: 1.5rem; padding: 5px 10px; }
-            
-            #click-btn-container { 
-                width: 100px; height: 100px; 
-                order: 2; 
+            #menu-btn { 
+                position: static; 
+                grid-column: 1; grid-row: 1;
+                justify-self: start;
+                font-size: 1.5rem; padding: 5px 10px; 
             }
-            #click-btn { width: 90px; height: 90px; font-size: 3rem; border-width: 4px; }
-            
-            /* Mobile Orbit Adjustments */
-            #dylan-sprite { margin-top: -55px; font-size: 2rem; } 
-            #heart-sprite { margin-top: -70px; font-size: 1.8rem; }
-            #dylan-sprite.hitting { margin-top: -25px; } 
-            #heart-sprite.hitting { margin-top: -25px; }
             
             .resource-display { 
+                grid-column: 2; grid-row: 1;
+                justify-self: end;
                 width: auto; 
                 padding: 5px; 
                 border: none; 
                 box-shadow: none; 
                 background: transparent;
-                text-align: left;
-                order: 3;
-                flex: 1;
+                text-align: right;
             }
-            #resource-count { font-size: 2.2rem; text-align: right; }
+            #resource-count { font-size: 2.5rem; text-align: right; }
             #rps-display { font-size: 1rem; text-align: right; }
-            #active-rps { display: none; } /* Hide floating text on mobile header to save space */
+            #active-rps { display: none; } 
             
-            .progress-container { display: none; } /* Hide goal bar in header, maybe move to bottom? */
+            #click-btn-container { 
+                grid-column: 1 / span 2; grid-row: 2;
+                justify-self: center;
+                width: 140px; height: 140px; 
+                margin-top: 10px;
+            }
+            #click-btn { width: 120px; height: 120px; font-size: 4rem; border-width: 4px; }
+            
+            /* Mobile Orbit Adjustments */
+            #dylan-sprite { margin-top: -70px; font-size: 2.2rem; } 
+            #heart-sprite { margin-top: -90px; font-size: 2rem; }
+            #dylan-sprite.hitting { margin-top: -35px; } 
+            #heart-sprite.hitting { margin-top: -35px; }
+            
+            .progress-container { display: none; } 
 
             /* RIGHT PANEL (List) */
             .right-panel { 
