@@ -732,6 +732,9 @@
                 u_fertilizer: "Organic Fertilizer", u_fertilizer_d: "Tea Hills x2 Production",
                 u_nguyen: "All I Do Is Nguyen", u_nguyen_d: "Win win win! Global x1.5",
                 u_trade_deal: "VN-JP Trade Deal", u_trade_deal_d: "Big Business! Global +50%",
+                u_virag: "Virag (Bossgirl)", u_virag_d: "She's the boss! Global x1.4",
+                u_silvi_vivi: "Silvi & Vivi (Deak Twins)", u_silvi_vivi_d: "Double trouble! Global x1.5",
+                u_bogi: "Bogi (Malta)", u_bogi_d: "Island vibes! Click gains 10% of MPS",
 
                 n_start_1: "Hani tries to put paprika in matcha. Hungarians are confused.",
                 n_start_2: "Local Budapest resident: 'Is this soup?'",
@@ -774,7 +777,10 @@
                 n_gen_2: "Breaking: Coffee beans go on strike.",
                 n_gen_3: "Matcha is the new water.",
                 n_gen_4: "Local man claims he turned green after drinking too much matcha.",
-                n_gen_5: "Hani's cafe wins 'Greenest Place on Earth' award."
+                n_gen_5: "Hani's cafe wins 'Greenest Place on Earth' award.",
+                n_virag: "Virag takes over the company. Profits soar.",
+                n_silvi_vivi: "Silvi & Vivi confuse customers. Sales double.",
+                n_bogi: "Bogi sends postcards from Malta. Everyone wants tea."
             },
             hu: {
                 intro_title: "Hani Ünnepi Matcha Kávézója", intro_text: "Karácsony van Budapesten! Hani igazi Matchát akar adni a világnak. Fogd a Legendás Habverőt és indulj!",
@@ -829,6 +835,9 @@
                 u_fertilizer: "Bio Trágya", u_fertilizer_d: "Tea Hegy x2",
                 u_nguyen: "Csak A Győzelem", u_nguyen_d: "Nyerés! x1.5",
                 u_trade_deal: "VN-JP Kereskedelem", u_trade_deal_d: "Nagy Üzlet! x1.5",
+                u_virag: "Virág (Főnökasszony)", u_virag_d: "Ő a főnök! Globális x1.4",
+                u_silvi_vivi: "Szilvi & Vivi (Deák Ikrek)", u_silvi_vivi_d: "Dupla baj! Globális x1.5",
+                u_bogi: "Bogi (Málta)", u_bogi_d: "Szigeti hangulat! Kattintás az MPS 10%-át adja",
 
                 n_start_1: "Hani paprikát tesz a matchába. A magyarok zavartak.",
                 n_start_2: "Budapesti lakos: 'Ez leves?'",
@@ -871,7 +880,10 @@
                 n_gen_2: "A kávébabok sztrájkolnak.",
                 n_gen_3: "A Matcha az új víz.",
                 n_gen_4: "Egy férfi kizöldült a teától.",
-                n_gen_5: "Hani kávézója nyert egy díjat."
+                n_gen_5: "Hani kávézója nyert egy díjat.",
+                n_virag: "Virág átveszi a céget. A profit szárnyal.",
+                n_silvi_vivi: "Szilvi & Vivi összezavarja a vevőket. Az eladás duplázódik.",
+                n_bogi: "Bogi képeslapot küld Máltáról. Mindenki teát akar."
             },
             nl: {
                 intro_title: "Hani's Kerst Matcha", intro_text: "Het is Kerstmis! Hani wil de wereld verwarmen met ECHTE Matcha. Pak de Legendarische Garde en begin!",
@@ -1203,7 +1215,10 @@
                 { id: 'boss_woman', icon: "👩🏻‍💼", cost: 400000, type: 'global_mult', value: 1.5, trigger: g => g.buildings[6] > 0 },
                 { id: 'fertilizer', icon: "🌱", cost: 500000, type: 'building_mult', bId: 4, value: 2, trigger: g => g.buildings[4] >= 5 },
                 { id: 'nguyen', icon: "🏆", cost: 750000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
-                { id: 'trade_deal', icon: "🤝", cost: 1000000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 }
+                { id: 'trade_deal', icon: "🤝", cost: 1000000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
+                { id: 'virag', icon: "👩🏻‍💻", cost: 300000, type: 'global_mult', value: 1.4, trigger: g => g.total >= 150000 },
+                { id: 'silvi_vivi', icon: "👯‍♀️", cost: 600000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 300000 },
+                { id: 'bogi', icon: "🏝️", cost: 800000, type: 'click_percent_mps', value: 0.10, trigger: g => g.total >= 400000 }
             ],
             news: [
                 { id: 'n_start_1', req: g => g.loc === 0 },
@@ -1230,6 +1245,9 @@
                 { id: 'n_cat', req: g => g.upgrades.includes('cat') },
                 { id: 'n_bao', req: g => g.upgrades.includes('bao') },
                 { id: 'n_boss', req: g => g.upgrades.includes('boss_woman') },
+                { id: 'n_virag', req: g => g.upgrades.includes('virag') },
+                { id: 'n_silvi_vivi', req: g => g.upgrades.includes('silvi_vivi') },
+                { id: 'n_bogi', req: g => g.upgrades.includes('bogi') },
                 { id: 'n_sci', req: g => mps > 5000 },
                 { id: 'n_blackhole', req: g => mps > 50000 },
                 { id: 'n_save', req: g => mps > 200000 },
@@ -1552,6 +1570,28 @@
         }
 
         /* --- UI RENDERERS --- */
+        let selectedShopItem = null;
+
+        function getNameDesc(id, count) {
+            const b = CONFIG.buildings[id];
+            let n = getText(`b${id}_n`);
+            let d = getText(`b${id}_d`);
+            let s = b.symbol;
+            if(count >= 50) {
+                n = getText(`b${id}_n_t3`) || n;
+                d = getText(`b${id}_d_t3`) || d;
+                s = b.evolved2.symbol;
+                d += " (x4!)";
+            } else if(count >= 25) {
+                n = getText(`b${id}_n_t2`) || n;
+                d = getText(`b${id}_d_t2`) || d;
+                s = b.evolved.symbol;
+                d += " (x2!)";
+            }
+            if(count >= 100) d += " (x10000!)";
+            return {n, d, s};
+        }
+
         function renderShop() {
             const bContainer = document.getElementById('tab-buildings');
             bContainer.innerHTML = '';
@@ -1561,29 +1601,9 @@
                 div.id = `build-${i}`;
                 div.onclick = () => buyBuilding(i);
                 
-                // Helper to get translated name/desc
-                const getNameDesc = (count) => {
-                    let n = getText(`b${i}_n`);
-                    let d = getText(`b${i}_d`);
-                    let s = b.symbol;
-                    if(count >= 50) {
-                        n = getText(`b${i}_n_t3`) || n;
-                        d = getText(`b${i}_d_t3`) || d;
-                        s = b.evolved2.symbol;
-                        d += " (x4!)";
-                    } else if(count >= 25) {
-                        n = getText(`b${i}_n_t2`) || n;
-                        d = getText(`b${i}_d_t2`) || d;
-                        s = b.evolved.symbol;
-                        d += " (x2!)";
-                    }
-                    if(count >= 100) d += " (x10000!)";
-                    return {n, d, s};
-                };
-
                 div.onmouseenter = () => {
                     const count = state.buildings[i];
-                    const info = getNameDesc(count);
+                    const info = getNameDesc(i, count);
                     showInfo(info.s, info.n, info.d, `Cost: ${Math.floor(b.baseCost * Math.pow(1.15, count)).toLocaleString()}`);
                 };
                 div.onmouseleave = clearInfo;
@@ -1746,6 +1766,19 @@
         document.getElementById('click-btn').addEventListener('mousedown', (e) => doClick(false));
 
         function buyBuilding(id) {
+            // Mobile check: Click to see info first
+            if (window.innerWidth <= 768) {
+                const key = 'b' + id;
+                if (selectedShopItem !== key) {
+                    selectedShopItem = key;
+                    const count = state.buildings[id];
+                    const b = CONFIG.buildings[id];
+                    const info = getNameDesc(id, count);
+                    showInfo(info.s, info.n, info.d, `Cost: ${Math.floor(b.baseCost * Math.pow(1.15, count)).toLocaleString()}`);
+                    return;
+                }
+            }
+
             const cost = Math.floor(CONFIG.buildings[id].baseCost * Math.pow(1.15, state.buildings[id]));
             if(state.res >= cost) {
                 state.res -= cost;
@@ -1762,6 +1795,17 @@
         }
 
         function buyUpgrade(id) {
+            // Mobile check
+            if (window.innerWidth <= 768) {
+                const key = 'u' + id;
+                if (selectedShopItem !== key) {
+                    selectedShopItem = key;
+                    const u = CONFIG.upgrades.find(x => x.id === id);
+                    showInfo(u.icon, getText(`u_${u.id}`), getText(`u_${u.id}_d`), `Cost: ${u.cost.toLocaleString()}`);
+                    return;
+                }
+            }
+
             const u = CONFIG.upgrades.find(x => x.id === id);
             if(u && state.res >= u.cost && !state.upgrades.includes(id)) {
                 state.res -= u.cost;
