@@ -36,7 +36,7 @@
             /* Priority: Windows 11 -> Google Noto (Universal) -> System */
             font-family: 'VT323', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
             height: 100vh;
-            width: 100vw;
+            width: 100%;
             overflow: hidden;
             user-select: none;
             display: flex;
@@ -384,7 +384,10 @@
             .bouncing-sprite { font-size: 1.5rem; }
             
             #info-panel { height: 60px; padding: 2px; }
-            #info-icon-container { width: 35px; height: 35px; font-size: 1.8rem; }
+            #info-icon-container { 
+                width: 35px; height: 35px; font-size: 1.8rem; 
+                overflow: hidden; display: flex; justify-content: center; align-items: center;
+            }
             #info-icon-container.double-emoji { font-size: 1.0rem; letter-spacing: -3px; }
             #info-title { font-size: 1rem; }
             #info-desc { font-size: 0.8rem; }
@@ -411,27 +414,36 @@
                 display: flex; /* Override grid from portrait */
                 flex-direction: column;
                 width: 200px;
+                min-width: 200px; /* Override base min-width */
                 flex: 0 0 200px;
                 height: 100%;
-                justify-content: space-between;
-                gap: 5px;
+                justify-content: flex-start;
+                gap: 10px;
                 padding: 5px;
                 overflow-y: auto;
+                overflow-x: hidden;
             }
+            
+            .right-panel { min-width: 0; }
             
             /* Reset Grid Children Properties */
             .left-panel > * { margin: 0; width: 100%; }
             
             #menu-btn { 
-                position: absolute; top: 5px; left: 5px; 
+                position: static; 
                 grid-column: auto; grid-row: auto;
+                width: auto;
+                align-self: flex-start;
+                font-size: 0.8rem;
+                padding: 2px 6px;
+                margin-bottom: 5px;
             }
             
             .resource-display { 
                 grid-column: auto; grid-row: auto;
                 width: 100%; 
                 padding: 5px;
-                margin-top: 35px; /* Space for menu button */
+                margin-top: 0; 
                 background: #fff; 
                 border: 2px solid black;
                 box-shadow: 2px 2px 0px #888;
