@@ -59,7 +59,7 @@
         #intro-overlay, #tutorial-overlay, #location-popup, #stats-overlay, #menu-overlay, #map-overlay, #newspaper-overlay, #reset-overlay { display: none; }
 
         .modal-box {
-            background: var(--panel-bg);
+            background: #fff;
             border: 6px solid var(--primary);
             padding: 20px;
             max-width: 600px;
@@ -146,7 +146,7 @@
         /* LEFT PANEL */
         .left-panel {
             flex: 1; 
-            background: var(--panel-bg); 
+            background: #fff; 
             border: var(--border-width) solid var(--border-color);
             box-shadow: 6px 6px 0px rgba(0,0,0,0.5); 
             display: flex; 
@@ -170,8 +170,11 @@
             box-shadow: 4px 4px 0px #888; 
             width: 90%; 
         }
-        #resource-count { font-size: 3.5rem; font-weight: bold; color: var(--primary); line-height: 1; text-shadow: 2px 2px 0px rgba(0,0,0,0.1); word-break: break-all; }
-        #rps-display { font-size: 1.4rem; color: var(--accent); text-transform: uppercase; }
+        #resource-count { font-size: clamp(1.5rem, 6vw, 3rem); font-weight: bold; color: var(--primary); line-height: 1; text-shadow: 2px 2px 0px rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        @media (max-width: 768px) {
+            #resource-count { font-size: clamp(1rem, 8vw, 2rem); }
+        }
+        #rps-display { font-size: 1.4rem; color: var(--primary); text-transform: uppercase; }
         #active-rps { font-size: 1rem; color: #555; min-height: 1.2em; }
 
         #click-btn-container { position: relative; width: 220px; height: 220px; display: flex; align-items: center; justify-content: center; }
@@ -206,7 +209,7 @@
         #heart-sprite.hitting { margin-top: -60px; }
 
         /* PROGRESS BAR */
-        .progress-container { width: 100%; height: 20px; background-color: #ddd; border: 3px solid black; margin-top: 5px; position: relative; }
+        .progress-container { width: 100%; height: 20px; background-color: #ddd; border: 3px solid black; margin-top: 5px; position: relative; box-sizing: border-box; }
         .progress-fill { height: 100%; background-color: var(--primary); width: 0%; transition: width 0.5s; }
 
         /* RIGHT PANEL */
@@ -220,7 +223,7 @@
             gap: 0; 
             box-shadow: 6px 6px 0px rgba(0,0,0,0.5);
             border: var(--border-width) solid var(--border-color); 
-            background: var(--panel-bg); 
+            background: #fff; 
             color: #212121;
         }
 
@@ -234,15 +237,15 @@
         #info-panel { height: 80px; flex-shrink: 0; background: #fff; border-bottom: var(--border-width) solid var(--border-color); padding: 5px 10px; display: flex; align-items: center; gap: 10px; }
         #info-icon-container { width: 50px; height: 50px; background: #eee; border: 3px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; flex-shrink: 0; overflow: hidden; }
         #info-text { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-        #info-title { margin: 0; font-size: 1.2rem; color: var(--accent); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        #info-desc { margin: 0; font-size: 1rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #info-title { margin: 0; font-size: 1.2rem; color: #212121; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; }
+        #info-desc { margin: 0; font-size: 1rem; color: #212121; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.8; }
         #info-cost { font-weight: bold; color: var(--primary); font-size: 1rem; }
 
         /* TABS */
         .tabs-header { display: flex; height: 40px; flex-shrink: 0; background: #ddd; border-bottom: var(--border-width) solid var(--border-color); }
         .tab-btn { flex: 1; border: none; background: #ccc; font-family: inherit; font-size: 1.2rem; cursor: pointer; border-right: 2px solid var(--border-color); }
         .tab-btn:last-child { border-right: none; }
-        .tab-btn.active { background: var(--panel-bg); font-weight: bold; color: var(--accent); border-bottom: none; }
+        .tab-btn.active { background: #fff; font-weight: bold; color: #212121; border-bottom: none; }
 
         /* SCROLL CONTENT */
         .tab-content { flex: 1; overflow-y: auto; padding: 10px; display: none; }
@@ -295,7 +298,7 @@
         /* NEWS BAR */
         #news-bar { background: var(--news-bg); color: white; border-top: 4px solid black; height: 30px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex-shrink: 0; position: relative; cursor: grab; }
         #news-bar:active { cursor: grabbing; }
-        #news-label { background: var(--accent); padding: 0 10px; height: 100%; display: flex; align-items: center; font-weight: bold; font-size: 1.2rem; z-index: 10; position: absolute; left: 0; top: 0; }
+        #news-label { background: var(--accent); color: black; text-shadow: 1px 1px 0px white; padding: 0 10px; height: 100%; display: flex; align-items: center; font-weight: bold; font-size: 1.2rem; z-index: 10; position: absolute; left: 0; top: 0; }
         #news-track { display: flex; position: absolute; left: 80px; height: 100%; align-items: center; }
         .news-item { font-size: 1.2rem; padding-right: 40px; white-space: nowrap; }
 
@@ -341,7 +344,7 @@
                 background: transparent;
                 text-align: right;
             }
-            #resource-count { font-size: 2.5rem; text-align: right; }
+            #resource-count { text-align: right; }
             #rps-display { font-size: 1rem; text-align: right; }
             #active-rps { display: none; } 
             
@@ -593,6 +596,17 @@
             <h2 id="loc-popup-title"></h2>
             <p id="loc-popup-desc"></p>
             <button class="pixel-btn" onclick="closeLocPopup()" data-i18n="btn_nice">NICE</button>
+        </div>
+    </div>
+
+    <!-- WIN SCREEN -->
+    <div id="win-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; align-items:center; justify-content:center;">
+        <div class="modal-box" style="text-align:center;">
+            <h1>🎉 CONGRATULATIONS! 🎉</h1>
+            <p style="font-size:1.5rem;">You have upgraded every building to Level 100!</p>
+            <p style="font-size:1.2rem;">You are the ultimate Matcha Master!</p>
+            <br>
+            <button class="pixel-btn" onclick="document.getElementById('win-overlay').style.display='none'">CONTINUE PLAYING</button>
         </div>
     </div>
 
@@ -1178,15 +1192,15 @@
         const CONFIG = {
             fps: 30,
             locations: [
-                { id: 0, name: "Hungary", flag: "🇭🇺", threshold: 0, multiplier: 1, colors: { bg: "#8f1e1e", pat: "#165b33", pri: "#165b33", acc: "#d4af37", txt: "#212121" }, music: [220, 246, 261, 293, 329, 349, 415, 440], coords: { top: '28%', left: '54%' } },
-                { id: 1, name: "Spain", flag: "🇪🇸", threshold: 500, multiplier: 1.5, colors: { bg: "#AA151B", pat: "#F1BF00", pri: "#F1BF00", acc: "#AA151B", txt: "#212121" }, music: [329, 349, 392, 415, 392, 349, 329, 293], coords: { top: '35%', left: '49%' } },
-                { id: 2, name: "Netherlands", flag: "🇳🇱", threshold: 2500, multiplier: 2, colors: { bg: "#F36C21", pat: "#21468B", pri: "#F36C21", acc: "#21468B", txt: "#212121" }, music: [261, 329, 392, 523, 392, 329, 261, 196], coords: { top: '25%', left: '51%' } },
-                { id: 3, name: "UK", flag: "🇬🇧", threshold: 15000, multiplier: 3, colors: { bg: "#012169", pat: "#C8102E", pri: "#012169", acc: "#C8102E", txt: "#FFFFFF" }, music: [392, 392, 440, 493, 392, 293, 392, 493], coords: { top: '24%', left: '49%' } },
-                { id: 4, name: "Guyana", flag: "🇬🇾", threshold: 50000, multiplier: 4, colors: { bg: "#009E49", pat: "#FCD116", pri: "#CE1126", acc: "#000000", txt: "#212121" }, music: [261, 329, 392, 440, 392, 329, 293, 261], coords: { top: '55%', left: '25%' } },
-                { id: 5, name: "Suriname", flag: "🇸🇷", threshold: 150000, multiplier: 4.5, colors: { bg: "#377E3F", pat: "#FFFFFF", pri: "#B40A2D", acc: "#ECC81D", txt: "#212121" }, music: [329, 392, 440, 523, 440, 392, 329, 261], coords: { top: '55%', left: '27%' } },
-                { id: 6, name: "USA", flag: "🇺🇸", threshold: 500000, multiplier: 5, colors: { bg: "#3C3B6E", pat: "#B22234", pri: "#B22234", acc: "#FFFFFF", txt: "#FFFFFF" }, music: [261, 329, 392, 523, 659, 523, 392, 329], coords: { top: '30%', left: '15%' } },
-                { id: 7, name: "Vietnam", flag: "🇻🇳", threshold: 1500000, multiplier: 6, colors: { bg: "#ff007f", pat: "#ff4081", pri: "#00e676", acc: "#651fff", txt: "#212121" }, music: [261, 293, 349, 392, 440, 523], coords: { top: '45%', left: '72%' } },
-                { id: 8, name: "Matcha Earth", flag: "🌍", threshold: 100000000, multiplier: 10, colors: { bg: "#000000", pat: "#00ff00", pri: "#00ff00", acc: "#ffffff", txt: "#00ff00" }, music: [523, 659, 784, 1046], coords: { top: '50%', left: '50%' } }
+                { id: 0, name: "Hungary", flag: "🇭🇺", threshold: 0, multiplier: 1, colors: { bg: "#8f1e1e", pat: "#165b33", pri: "#165b33", acc: "#d4af37", txt: "#212121", pnl: "#f0f0f0" }, music: [220, 246, 261, 293, 329, 349, 415, 440], coords: { top: '28%', left: '54%' } },
+                { id: 1, name: "Spain", flag: "🇪🇸", threshold: 500, multiplier: 1.5, colors: { bg: "#AA151B", pat: "#F1BF00", pri: "#F1BF00", acc: "#AA151B", txt: "#212121", pnl: "#f0f0f0" }, music: [329, 349, 392, 415, 392, 349, 329, 293], coords: { top: '35%', left: '49%' } },
+                { id: 2, name: "Netherlands", flag: "🇳🇱", threshold: 2500, multiplier: 2, colors: { bg: "#F36C21", pat: "#21468B", pri: "#F36C21", acc: "#21468B", txt: "#212121", pnl: "#f0f0f0" }, music: [261, 329, 392, 523, 392, 329, 261, 196], coords: { top: '25%', left: '51%' } },
+                { id: 3, name: "UK", flag: "🇬🇧", threshold: 15000, multiplier: 3, colors: { bg: "#012169", pat: "#C8102E", pri: "#012169", acc: "#C8102E", txt: "#FFFFFF", pnl: "#012169" }, music: [392, 392, 440, 493, 392, 293, 392, 493], coords: { top: '24%', left: '49%' } },
+                { id: 4, name: "Guyana", flag: "🇬🇾", threshold: 50000, multiplier: 4, colors: { bg: "#009E49", pat: "#FCD116", pri: "#CE1126", acc: "#000000", txt: "#212121", pnl: "#f0f0f0" }, music: [261, 329, 392, 440, 392, 329, 293, 261], coords: { top: '55%', left: '25%' } },
+                { id: 5, name: "Suriname", flag: "🇸🇷", threshold: 150000, multiplier: 4.5, colors: { bg: "#377E3F", pat: "#FFFFFF", pri: "#B40A2D", acc: "#ECC81D", txt: "#212121", pnl: "#f0f0f0" }, music: [329, 392, 440, 523, 440, 392, 329, 261], coords: { top: '55%', left: '27%' } },
+                { id: 6, name: "USA", flag: "🇺🇸", threshold: 500000, multiplier: 5, colors: { bg: "#3C3B6E", pat: "#B22234", pri: "#B22234", acc: "#FFFFFF", txt: "#FFFFFF", pnl: "#3C3B6E" }, music: [261, 329, 392, 523, 659, 523, 392, 329], coords: { top: '30%', left: '15%' } },
+                { id: 7, name: "Vietnam", flag: "🇻🇳", threshold: 1500000, multiplier: 6, colors: { bg: "#ff007f", pat: "#ff4081", pri: "#00e676", acc: "#651fff", txt: "#212121", pnl: "#f0f0f0" }, music: [261, 293, 349, 392, 440, 523], coords: { top: '45%', left: '72%' } },
+                { id: 8, name: "Matcha Earth", flag: "🌍", threshold: 100000000, multiplier: 10, colors: { bg: "#000000", pat: "#00ff00", pri: "#00ff00", acc: "#ffffff", txt: "#00ff00", pnl: "#000000" }, music: [523, 659, 784, 1046], coords: { top: '50%', left: '50%' } }
             ],
             buildings: [
                 { id: 0, baseCost: 15, baseProd: 0.5, symbol: "🥣", evolved: {symbol: "🦾"}, evolved2: {symbol: "⚛️"} },
@@ -1224,7 +1238,7 @@
                 { id: 'nguyen', icon: "🏆", cost: 750000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
                 { id: 'trade_deal', icon: "🤝", cost: 1000000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
                 { id: 'virag', icon: "👩🏻‍💻", cost: 300000, type: 'global_mult', value: 1.4, trigger: g => g.total >= 150000 },
-                { id: 'silvi_vivi', icon: "�🏻👩🏼", cost: 600000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 300000, isDouble: true },
+                { id: 'silvi_vivi', icon: "👩🏻👩🏻", cost: 600000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 300000, isDouble: true },
                 { id: 'bogi', icon: "🏝️", cost: 800000, type: 'click_percent_mps', value: 0.10, trigger: g => g.total >= 400000 }
             ],
             news: [
@@ -1277,7 +1291,7 @@
             ]
         };
 
-        let state = { res: 0, total: 0, buildings: [0,0,0,0,0,0,0,0], buildingProduction: [0,0,0,0,0,0,0,0], upgrades: [], visuals: [], loc: 0 };
+        let state = { res: 0, total: 0, buildings: [0,0,0,0,0,0,0,0], buildingProduction: [0,0,0,0,0,0,0,0], upgrades: [], visuals: [], loc: 0, won: false };
         let mps = 0, clickPower = 1, clickHistory = [];
         let buildingMPS = [0,0,0,0,0,0,0,0]; 
         let audioCtx, isMuted = false, musicTimer, noteIndex = 0;
@@ -1287,6 +1301,11 @@
         let heartTimer = 0;
         let dylanAngle = 0;
         let cafeSprites = [];
+
+        function showWinScreen() {
+            document.getElementById('win-overlay').style.display = 'flex';
+            sfxBuy(); // Play a sound
+        }
 
         function init() {
             load();
@@ -1635,7 +1654,7 @@
             CONFIG.upgrades.forEach(u => {
                 const div = document.createElement('div');
                 div.className = 'upgrade-card';
-                if (u.isDouble || u.icon.length > 4) div.classList.add('double-emoji');
+                if (u.isDouble) div.classList.add('double-emoji');
                 div.id = `upg-${u.id}`;
                 div.style.display = 'none';
                 div.innerHTML = `${u.icon}`;
@@ -1668,11 +1687,11 @@
             const iconContainer = document.getElementById('info-icon-container');
             iconContainer.innerText = icon;
             // Adjust font size for double emojis in info panel
-            if (isDouble || icon.length > 4) {
+            if (isDouble) {
                 iconContainer.style.fontSize = '1.1rem';
                 iconContainer.style.letterSpacing = '-3px';
             } else {
-                iconContainer.style.fontSize = '2.5rem';
+                iconContainer.style.fontSize = '2.0rem'; // Reduced from 2.5rem to prevent cutoff
                 iconContainer.style.letterSpacing = 'normal';
             }
             
@@ -1700,6 +1719,8 @@
                 if(u) {
                     const div = document.createElement('div');
                     div.className = 'passive-row';
+                    div.style.cursor = 'pointer';
+                    div.onclick = () => showInfo(u.icon, getText(`u_${u.id}`), getText(`u_${u.id}_d`), `Cost: ${u.cost.toLocaleString()}`, u.isDouble);
                     div.innerHTML = `<span style="font-size:1.5rem; margin-right:10px;">${u.icon}</span> <strong>${getText(`u_${u.id}`)}</strong>`;
                     list.appendChild(div);
                 }
@@ -1833,6 +1854,13 @@
                 } else if(state.buildings[id] === 50) {
                     showNewspaper(getText(`b${id}_n_t3`), "TIER 3 REACHED!");
                 }
+                
+                // Win Condition Check
+                if (!state.won && state.buildings.every(count => count >= 100)) {
+                    state.won = true;
+                    showWinScreen();
+                }
+
                 recalc(); updateUI(); syncCafeSprites();
             }
         }
@@ -1962,6 +1990,7 @@
             r.setProperty('--primary', loc.colors.pri);
             r.setProperty('--accent', loc.colors.acc);
             r.setProperty('--text-color', loc.colors.txt || '#212121');
+            r.setProperty('--panel-bg', loc.colors.pnl || '#f0f0f0');
         }
 
         function createSnow() {
