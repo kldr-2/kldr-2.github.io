@@ -190,6 +190,8 @@
         /* ORBITS */
         .orbit-wrapper { position: absolute; width: 100%; height: 100%; z-index: 20; pointer-events: none; display: none; }
         .orbiter-sprite { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3.5rem; transition: margin-top 0.1s; }
+        
+        /* Default (Desktop) Orbit Positions */
         #dylan-sprite { margin-top: -80px; } 
         #heart-sprite { margin-top: -110px; font-size: 2.5rem; }
         #dylan-sprite.hitting { margin-top: -40px; } 
@@ -319,6 +321,12 @@
             }
             #click-btn { width: 90px; height: 90px; font-size: 3rem; border-width: 4px; }
             
+            /* Mobile Orbit Adjustments */
+            #dylan-sprite { margin-top: -55px; font-size: 2rem; } 
+            #heart-sprite { margin-top: -70px; font-size: 1.8rem; }
+            #dylan-sprite.hitting { margin-top: -25px; } 
+            #heart-sprite.hitting { margin-top: -25px; }
+            
             .resource-display { 
                 width: auto; 
                 padding: 5px; 
@@ -381,6 +389,12 @@
             #menu-btn { position: absolute; top: 5px; left: 5px; }
             #click-btn-container { width: 120px; height: 120px; margin: 0 auto; }
             #click-btn { width: 100px; height: 100px; font-size: 3.5rem; }
+            
+            /* Landscape Mobile Orbit Adjustments */
+            #dylan-sprite { margin-top: -60px; font-size: 2.2rem; } 
+            #heart-sprite { margin-top: -75px; font-size: 2rem; }
+            #dylan-sprite.hitting { margin-top: -30px; } 
+            #heart-sprite.hitting { margin-top: -30px; }
             
             .resource-display { text-align: center; width: 100%; }
             #resource-count { text-align: center; font-size: 2.5rem; }
