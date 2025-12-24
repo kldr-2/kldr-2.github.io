@@ -404,33 +404,72 @@
                 flex-direction: row; 
                 padding-left: env(safe-area-inset-left);
                 padding-right: env(safe-area-inset-right);
+                height: calc(100vh - 34px);
             }
             
             .left-panel {
+                display: flex; /* Override grid from portrait */
                 flex-direction: column;
-                width: 220px;
-                flex: 0 0 220px;
+                width: 200px;
+                flex: 0 0 200px;
                 height: 100%;
-                justify-content: center;
+                justify-content: space-between;
                 gap: 5px;
+                padding: 5px;
+                overflow-y: auto;
             }
             
-            #menu-btn { position: absolute; top: 5px; left: 5px; }
-            #click-btn-container { width: 120px; height: 120px; margin: 0 auto; }
-            #click-btn { width: 100px; height: 100px; font-size: 3.5rem; }
+            /* Reset Grid Children Properties */
+            .left-panel > * { margin: 0; width: 100%; }
+            
+            #menu-btn { 
+                position: absolute; top: 5px; left: 5px; 
+                grid-column: auto; grid-row: auto;
+            }
+            
+            .resource-display { 
+                grid-column: auto; grid-row: auto;
+                width: 100%; 
+                padding: 5px;
+                margin-top: 35px; /* Space for menu button */
+                background: #fff; 
+                border: 2px solid black;
+                box-shadow: 2px 2px 0px #888;
+                text-align: center;
+            }
+            #resource-count { font-size: 1.8rem; text-align: center; }
+            #rps-display { font-size: 1rem; text-align: center; }
+            #active-rps { display: block; font-size: 0.8rem; }
+
+            #click-btn-container { 
+                grid-column: auto; grid-row: auto;
+                width: 100px; height: 100px; 
+                margin: 5px auto; 
+            }
+            #click-btn { width: 90px; height: 90px; font-size: 3rem; border-width: 4px; }
             
             /* Landscape Mobile Orbit Adjustments */
-            #dylan-sprite { margin-top: -60px; font-size: 2.2rem; } 
-            #heart-sprite { margin-top: -75px; font-size: 2rem; }
-            #dylan-sprite.hitting { margin-top: -30px; } 
-            #heart-sprite.hitting { margin-top: -30px; }
+            #dylan-sprite { margin-top: -50px; font-size: 2rem; } 
+            #heart-sprite { margin-top: -60px; font-size: 1.8rem; }
+            #dylan-sprite.hitting { margin-top: -25px; } 
+            #heart-sprite.hitting { margin-top: -25px; }
             
-            .resource-display { text-align: center; width: 100%; }
-            #resource-count { text-align: center; font-size: 2.5rem; }
-            #rps-display { text-align: center; }
+            .goal-container {
+                grid-column: auto; grid-row: auto;
+                margin-top: 0 !important;
+            }
             
-            .right-panel { flex: 1; }
+            .right-panel { flex: 1; height: 100%; }
             #cafe-scene { display: none; } /* Hide scene in landscape to maximize list view */
+            
+            #info-panel { height: 55px; padding: 2px 5px; }
+            #info-icon-container { width: 40px; height: 40px; font-size: 1.8rem; }
+            #info-icon-container.double-emoji { font-size: 1.0rem; letter-spacing: -3px; }
+            #info-title { font-size: 1rem; }
+            #info-desc { font-size: 0.8rem; }
+            
+            .tabs-header { height: 30px; }
+            .tab-btn { font-size: 0.9rem; padding: 2px; }
         }
 
         /* VOLUME CONTROLS */
