@@ -232,7 +232,7 @@
 
         /* INFO PANEL */
         #info-panel { height: 80px; flex-shrink: 0; background: #fff; border-bottom: var(--border-width) solid var(--border-color); padding: 5px 10px; display: flex; align-items: center; gap: 10px; }
-        #info-icon-container { width: 50px; height: 50px; background: #eee; border: 3px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; flex-shrink: 0; }
+        #info-icon-container { width: 50px; height: 50px; background: #eee; border: 3px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; flex-shrink: 0; overflow: hidden; }
         #info-text { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
         #info-title { margin: 0; font-size: 1.2rem; color: var(--accent); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #info-desc { margin: 0; font-size: 1rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -261,6 +261,7 @@
         /* UPGRADES */
         .upgrades-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 8px; }
         .upgrade-card { height: 50px; background: var(--accent); border: 3px solid black; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; cursor: pointer; overflow: hidden; }
+        .upgrade-card.double-emoji { font-size: 1.1rem; letter-spacing: -3px; }
         .passive-row { border-bottom: 1px dashed #ccc; padding: 5px 0; display: flex; align-items: center; font-size: 1rem; }
 
         /* STATS TABLE */
@@ -1211,11 +1212,11 @@
                 { id: 'barni', icon: "👨🏼‍🎨", cost: 5000, type: 'global_mult', value: 1.2, trigger: g => g.total >= 2000, visual: "👨🏼‍🎨" },
                 { id: 'lucky', icon: "👨🏾", cost: 7777, type: 'passive', value: 0, trigger: g => g.total >= 5000 },
                 { id: 'modeling', icon: "📸", cost: 10000, type: 'building_mult', bId: 1, value: 2, trigger: g => g.buildings[1] >= 10 },
-                { id: 'vini', icon: "👨🏻📞", cost: 15000, type: 'global_mult', value: 1.3, trigger: g => g.total >= 10000, visual: "👨🏻" },
+                { id: 'vini', icon: "👨🏻📞", cost: 15000, type: 'global_mult', value: 1.3, trigger: g => g.total >= 10000, visual: "👨🏻", isDouble: true },
                 { id: 'naomi', icon: "🔮", cost: 25000, type: 'passive', value: 0, trigger: g => g.loc >= 3, visual: "🔮" }, 
                 { id: 'richi', icon: "🏃🏾‍♂️", cost: 40000, type: 'building_mult', bId: 3, value: 2, trigger: g => g.loc >= 6, visual: "🏃🏾‍♂️" }, 
                 { id: 'orsidia', icon: "👯‍♀️", cost: 50000, type: 'global_mult', value: 1.4, trigger: g => g.total >= 25000, visual: "👯‍♀️" },
-                { id: 'bao', icon: "👨🏻🏅", cost: 75000, type: 'click_mult', value: 1.25, trigger: g => g.total >= 40000, visual: "🏅" },
+                { id: 'bao', icon: "👨🏻🏅", cost: 75000, type: 'click_mult', value: 1.25, trigger: g => g.total >= 40000, visual: "🏅", isDouble: true },
                 { id: 'adri', icon: "👩🏾", cost: 150000, type: 'global_mult', value: 2.0, trigger: g => g.loc >= 4, visual: "🕊️" }, 
                 { id: 'cat', icon: "🐈", cost: 250000, type: 'global_mult', value: 1.1, trigger: g => g.total >= 100000, visual: "🐈" },
                 { id: 'boss_woman', icon: "👩🏻‍💼", cost: 400000, type: 'global_mult', value: 1.5, trigger: g => g.buildings[6] > 0 },
@@ -1223,7 +1224,7 @@
                 { id: 'nguyen', icon: "🏆", cost: 750000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
                 { id: 'trade_deal', icon: "🤝", cost: 1000000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 500000 },
                 { id: 'virag', icon: "👩🏻‍💻", cost: 300000, type: 'global_mult', value: 1.4, trigger: g => g.total >= 150000 },
-                { id: 'silvi_vivi', icon: "👯‍♀️", cost: 600000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 300000 },
+                { id: 'silvi_vivi', icon: "�🏻👩🏼", cost: 600000, type: 'global_mult', value: 1.5, trigger: g => g.total >= 300000, isDouble: true },
                 { id: 'bogi', icon: "🏝️", cost: 800000, type: 'click_percent_mps', value: 0.10, trigger: g => g.total >= 400000 }
             ],
             news: [
@@ -1634,13 +1635,14 @@
             CONFIG.upgrades.forEach(u => {
                 const div = document.createElement('div');
                 div.className = 'upgrade-card';
+                if (u.isDouble || u.icon.length > 4) div.classList.add('double-emoji');
                 div.id = `upg-${u.id}`;
                 div.style.display = 'none';
                 div.innerHTML = `${u.icon}`;
                 div.onclick = () => buyUpgrade(u.id);
                 
                 if (!isMobile) {
-                    div.onmouseenter = () => showInfo(u.icon, getText(`u_${u.id}`), getText(`u_${u.id}_d`), `Cost: ${u.cost.toLocaleString()}`);
+                    div.onmouseenter = () => showInfo(u.icon, getText(`u_${u.id}`), getText(`u_${u.id}_d`), `Cost: ${u.cost.toLocaleString()}`, u.isDouble);
                     div.onmouseleave = clearInfo;
                 }
                 
@@ -1662,8 +1664,18 @@
             }
         }
 
-        function showInfo(icon, title, desc, cost) {
-            document.getElementById('info-icon-container').innerText = icon;
+        function showInfo(icon, title, desc, cost, isDouble = false) {
+            const iconContainer = document.getElementById('info-icon-container');
+            iconContainer.innerText = icon;
+            // Adjust font size for double emojis in info panel
+            if (isDouble || icon.length > 4) {
+                iconContainer.style.fontSize = '1.1rem';
+                iconContainer.style.letterSpacing = '-3px';
+            } else {
+                iconContainer.style.fontSize = '2.5rem';
+                iconContainer.style.letterSpacing = 'normal';
+            }
+            
             document.getElementById('info-title').innerText = title;
             document.getElementById('info-desc').innerText = desc;
             document.getElementById('info-cost').innerText = cost;
