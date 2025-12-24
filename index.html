@@ -251,16 +251,16 @@
         /* SHOP ITEMS */
         .shop-item { background: white; border: 3px solid black; margin-bottom: 8px; padding: 5px; display: flex; align-items: center; cursor: pointer; }
         .shop-item.disabled { background: #e0e0e0; opacity: 0.6; filter: grayscale(1); }
-        .item-icon { font-size: 1.8rem; width: 40px; text-align: center; }
-        .item-details { flex: 1; padding: 0 10px; }
-        .item-details h3 { margin: 0; font-size: 1.2rem; }
-        .item-right { text-align: right; }
+        .item-icon { font-size: 1.8rem; width: 50px; text-align: center; flex-shrink: 0; }
+        .item-details { flex: 1; padding: 0 10px; overflow: hidden; }
+        .item-details h3 { margin: 0; font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .item-right { text-align: right; flex-shrink: 0; }
         .item-cost { font-weight: bold; color: var(--accent); font-size: 1rem; }
         .item-count { background: black; color: white; padding: 0 5px; border-radius: 4px; font-size: 0.9rem; }
 
         /* UPGRADES */
         .upgrades-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 8px; }
-        .upgrade-card { height: 50px; background: var(--accent); border: 3px solid black; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; color: white; cursor: pointer; }
+        .upgrade-card { height: 50px; background: var(--accent); border: 3px solid black; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; cursor: pointer; overflow: hidden; }
         .passive-row { border-bottom: 1px dashed #ccc; padding: 5px 0; display: flex; align-items: center; font-size: 1rem; }
 
         /* STATS TABLE */
@@ -315,7 +315,7 @@
                 min-height: auto;
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                grid-template-rows: auto auto;
+                grid-template-rows: auto auto auto;
                 align-items: center;
                 gap: 10px;
             }
@@ -358,7 +358,13 @@
             #dylan-sprite.hitting { margin-top: -40px; } 
             #heart-sprite.hitting { margin-top: -40px; }
             
-            .progress-container { display: none; } 
+            .goal-container {
+                grid-column: 1 / span 2;
+                grid-row: 3;
+                width: 100%;
+                margin-top: 10px !important;
+            }
+            .progress-container { display: block; height: 15px; } 
 
             /* RIGHT PANEL (List) */
             .right-panel { 
@@ -612,7 +618,7 @@
                 </div>
             </div>
             
-            <div style="margin-top: auto; text-align: center; color: var(--text-color); width: 100%;">
+            <div class="goal-container" style="margin-top: auto; text-align: center; color: var(--text-color); width: 100%;">
                 <p style="font-size: 1.2rem; margin: 0;" id="goal-text"></p>
                 <div class="progress-container">
                     <div class="progress-fill" id="goal-progress"></div>
@@ -1595,18 +1601,23 @@
         function renderShop() {
             const bContainer = document.getElementById('tab-buildings');
             bContainer.innerHTML = '';
+            const isMobile = window.innerWidth <= 768;
+
             CONFIG.buildings.forEach((b, i) => {
                 const div = document.createElement('div');
                 div.className = 'shop-item disabled';
                 div.id = `build-${i}`;
                 div.onclick = () => buyBuilding(i);
                 
-                div.onmouseenter = () => {
-                    const count = state.buildings[i];
-                    const info = getNameDesc(i, count);
-                    showInfo(info.s, info.n, info.d, `Cost: ${Math.floor(b.baseCost * Math.pow(1.15, count)).toLocaleString()}`);
-                };
-                div.onmouseleave = clearInfo;
+                if (!isMobile) {
+                    div.onmouseenter = () => {
+                        const count = state.buildings[i];
+                        const info = getNameDesc(i, count);
+                        showInfo(info.s, info.n, info.d, `Cost: ${Math.floor(b.baseCost * Math.pow(1.15, count)).toLocaleString()}`);
+                    };
+                    div.onmouseleave = clearInfo;
+                }
+
                 div.innerHTML = `
                     <div class="item-icon" id="icon-${i}">${b.symbol}</div>
                     <div class="item-details"><h3 id="name-${i}"></h3></div>
@@ -1627,8 +1638,12 @@
                 div.style.display = 'none';
                 div.innerHTML = `${u.icon}`;
                 div.onclick = () => buyUpgrade(u.id);
-                div.onmouseenter = () => showInfo(u.icon, getText(`u_${u.id}`), getText(`u_${u.id}_d`), `Cost: ${u.cost.toLocaleString()}`);
-                div.onmouseleave = clearInfo;
+                
+                if (!isMobile) {
+                    div.onmouseenter = () => showInfo(u.icon, getText(`u_${u.id}`), getText(`u_${u.id}_d`), `Cost: ${u.cost.toLocaleString()}`);
+                    div.onmouseleave = clearInfo;
+                }
+                
                 uContainer.appendChild(div);
             });
         }
@@ -1730,6 +1745,12 @@
             
             const btn = document.getElementById('click-btn');
             
+            // Visual feedback for ALL clicks (manual & auto)
+            btn.classList.remove('bump'); // Reset animation
+            void btn.offsetWidth; // Trigger reflow
+            btn.classList.add('bump');
+            setTimeout(() => btn.classList.remove('bump'), 150);
+            
             if(!auto) {
                 clickHistory.push(Date.now());
                 sfxClick();
@@ -1739,8 +1760,6 @@
                 const y = (rect.top - containerRect.top) + Math.random() * rect.height;
                 spawnFloat(amount, isCrit, x, y);
             } else {
-                btn.classList.add('bump');
-                setTimeout(() => btn.classList.remove('bump'), 150);
                 if(source === 'dylan') {
                     const el = document.getElementById('dylan-sprite');
                     if(el) { el.classList.add('hitting'); setTimeout(() => el.classList.remove('hitting'), 150); }
@@ -1763,11 +1782,22 @@
             setTimeout(() => float.remove(), 800);
         }
 
-        document.getElementById('click-btn').addEventListener('mousedown', (e) => doClick(false));
+        document.getElementById('click-btn').addEventListener('mousedown', (e) => {
+            if(e.button === 0) doClick(false);
+        });
+        document.getElementById('click-btn').addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent mouse emulation
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                doClick(false);
+            }
+        }, {passive: false});
 
         function buyBuilding(id) {
-            // Mobile check: Click to see info first
-            if (window.innerWidth <= 768) {
+            // Mobile/Touch check: Click to see info first
+            // Broader check: Width <= 1024 OR Touch capability
+            const isMobile = window.innerWidth <= 1024 || (navigator.maxTouchPoints > 0);
+            
+            if (isMobile) {
                 const key = 'b' + id;
                 if (selectedShopItem !== key) {
                     selectedShopItem = key;
@@ -1777,6 +1807,7 @@
                     showInfo(info.s, info.n, info.d, `Cost: ${Math.floor(b.baseCost * Math.pow(1.15, count)).toLocaleString()}`);
                     return;
                 }
+                // If clicking the same item again, proceed to buy
             }
 
             const cost = Math.floor(CONFIG.buildings[id].baseCost * Math.pow(1.15, state.buildings[id]));
@@ -1795,8 +1826,10 @@
         }
 
         function buyUpgrade(id) {
-            // Mobile check
-            if (window.innerWidth <= 768) {
+            // Mobile/Touch check
+            const isMobile = window.innerWidth <= 1024 || (navigator.maxTouchPoints > 0);
+
+            if (isMobile) {
                 const key = 'u' + id;
                 if (selectedShopItem !== key) {
                     selectedShopItem = key;
@@ -1804,6 +1837,7 @@
                     showInfo(u.icon, getText(`u_${u.id}`), getText(`u_${u.id}_d`), `Cost: ${u.cost.toLocaleString()}`);
                     return;
                 }
+                // If clicking the same item again, proceed to buy
             }
 
             const u = CONFIG.upgrades.find(x => x.id === id);
