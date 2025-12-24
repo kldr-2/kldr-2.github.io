@@ -235,7 +235,8 @@
 
         /* INFO PANEL */
         #info-panel { height: 80px; flex-shrink: 0; background: #fff; border-bottom: var(--border-width) solid var(--border-color); padding: 5px 10px; display: flex; align-items: center; gap: 10px; }
-        #info-icon-container { width: 50px; height: 50px; background: #eee; border: 3px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; flex-shrink: 0; overflow: hidden; }
+        #info-icon-container { width: 50px; height: 50px; background: #eee; border: 3px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; flex-shrink: 0; overflow: hidden; white-space: nowrap; }
+        #info-icon-container.double-emoji { font-size: 1.5rem; letter-spacing: -5px; }
         #info-text { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
         #info-title { margin: 0; font-size: 1.2rem; color: #212121; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; }
         #info-desc { margin: 0; font-size: 1rem; color: #212121; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.8; }
@@ -383,7 +384,8 @@
             .bouncing-sprite { font-size: 1.5rem; }
             
             #info-panel { height: 60px; padding: 2px; }
-            #info-icon-container { width: 35px; height: 35px; font-size: 1.5rem; }
+            #info-icon-container { width: 35px; height: 35px; font-size: 1.8rem; }
+            #info-icon-container.double-emoji { font-size: 1.0rem; letter-spacing: -3px; }
             #info-title { font-size: 1rem; }
             #info-desc { font-size: 0.8rem; }
             
@@ -724,7 +726,7 @@
                 loc_2: "Netherlands", loc_w_2: "Amsterdam! Stroopwafels and Matcha.",
                 loc_3: "UK", loc_w_3: "London Calling! Swap the Earl Grey for Matcha.",
                 loc_4: "Guyana", loc_w_4: "Welcome to Guyana! The Land of Many Waters... and now Matcha!",
-                loc_5: "Suriname", loc_w_5: "Suriname! Beautiful nature and powerful tea.",
+                loc_5: "Surinam", loc_w_5: "Surinam! Beautiful nature and powerful tea.",
                 loc_6: "USA", loc_w_6: "USA! The land of opportunity and iced matcha lattes.",
                 loc_7: "Vietnam", loc_w_7: "Home sweet home! The Ultimate HQ.",
                 loc_8: "Matcha Earth", loc_w_8: "You have conquered the planet. The world is green.",
@@ -747,7 +749,7 @@
                 u_richi: "Richi's Sprint", u_richi_d: "Track star delivery! Fleet x2",
                 u_orsidia: "BFF Orsi & Dia", u_orsidia_d: "Besties support! Global x1.4",
                 u_bao: "Bao's Discovery", u_bao_d: "Found the medal! Click Power x1.25",
-                u_adri: "Adri's Peace", u_adri_d: "Reunited Guyana & Suriname! Global x2.0",
+                u_adri: "Adri's Peace", u_adri_d: "Reunited Guyana & Surinam! Global x2.0",
                 u_cat: "Shop Cat", u_cat_d: "Cute! Global +10%",
                 u_boss_woman: "Boss Woman", u_boss_woman_d: "Hani runs an NGO now. Global x1.5",
                 u_fertilizer: "Organic Fertilizer", u_fertilizer_d: "Tea Hills x2 Production",
@@ -769,7 +771,7 @@
                 n_guyana: "Hani exploring the Kaieteur Falls with a cup of tea.",
                 n_adri: "Adri has successfully negotiated a peace treaty using only Matcha.",
                 n_suri_1: "Paramaribo market sold out of green powder.",
-                n_suri_2: "Hani says Suriname reminds her of the good vibes.",
+                n_suri_2: "Hani says Surinam reminds her of the good vibes.",
                 n_richi: "Richi wins gold medal in Matcha Delivery Olympics.",
                 n_vn_1: "Hani finally arrives in Vietnam! The tea is perfect.",
                 n_vn_2: "Hanoi traffic stopped for giant tea parade.",
@@ -827,7 +829,7 @@
                 loc_2: "Hollandia", loc_w_2: "Amszterdam! Stroopwafel és Matcha.",
                 loc_3: "Egyesült Királyság", loc_w_3: "London hív! Cseréld az Earl Greyt Matchára.",
                 loc_4: "Guyana", loc_w_4: "Üdv Guyanában! A sok víz földje... és most már a Matcháé!",
-                loc_5: "Suriname", loc_w_5: "Suriname! Gyönyörű természet és erős tea.",
+                loc_5: "Szurinám", loc_w_5: "Szurinám! Gyönyörű természet és erős tea.",
                 loc_6: "USA", loc_w_6: "USA! A lehetőségek és a jeges matcha latték földje.",
                 loc_7: "Vietnam", loc_w_7: "Otthon, édes otthon! A Végső Főhadiszállás.",
                 loc_8: "Matcha Föld", loc_w_8: "Meghódítottad a bolygót. A világ zöld.",
@@ -850,7 +852,7 @@
                 u_richi: "Richi Sprintje", u_richi_d: "Futár sztár! Flotta x2",
                 u_orsidia: "Orsi & Dia", u_orsidia_d: "Barátnők támogatása! x1.4",
                 u_bao: "Bao Felfedezése", u_bao_d: "Meglett az érem! Kattintás x1.25",
-                u_adri: "Adri Békéje", u_adri_d: "Egyesítette Guyanát & Suriname-ot! x2.0",
+                u_adri: "Adri Békéje", u_adri_d: "Egyesítette Guyanát & Szurinámot! x2.0",
                 u_cat: "Bolti Macska", u_cat_d: "Cuki! x1.1",
                 u_boss_woman: "Főnökasszony", u_boss_woman_d: "Hani NGO-t vezet. x1.5",
                 u_fertilizer: "Bio Trágya", u_fertilizer_d: "Tea Hegy x2",
@@ -872,7 +874,7 @@
                 n_guyana: "Hani a Kaieteur-vízesésnél teázik.",
                 n_adri: "Adri békeszerződést kötött matchával.",
                 n_suri_1: "Paramaribo piaca kifogyott a zöld porból.",
-                n_suri_2: "Hani szerint Suriname a jó hangulat hazája.",
+                n_suri_2: "Hani szerint Szurinám a jó hangulat hazája.",
                 n_richi: "Richi aranyérmet nyert Matcha Futár Olimpián.",
                 n_vn_1: "Hani végre megérkezett Vietnámba! A tea tökéletes.",
                 n_vn_2: "Hanoi forgalma leállt az óriás tea parádé miatt.",
@@ -1285,7 +1287,7 @@
                 { id: 'n_gen_2', req: g => true },
                 { id: 'n_gen_3', req: g => true },
                 { id: 'n_gen_4', req: g => true },
-                { id: 'n_gen_5', req: g => true },
+                { id: 'n_gen_5', req: g => Math.random() < 0.05 },
                 // Dynamic Dylan News special handling in spawn
                 { id: 'n_dylan', req: g => g.upgrades.includes('dylan') }
             ]
@@ -1686,13 +1688,14 @@
         function showInfo(icon, title, desc, cost, isDouble = false) {
             const iconContainer = document.getElementById('info-icon-container');
             iconContainer.innerText = icon;
-            // Adjust font size for double emojis in info panel
+            // Reset inline styles to allow CSS classes to work
+            iconContainer.style.fontSize = '';
+            iconContainer.style.letterSpacing = '';
+
             if (isDouble) {
-                iconContainer.style.fontSize = '1.1rem';
-                iconContainer.style.letterSpacing = '-3px';
+                iconContainer.classList.add('double-emoji');
             } else {
-                iconContainer.style.fontSize = '2.0rem'; // Reduced from 2.5rem to prevent cutoff
-                iconContainer.style.letterSpacing = 'normal';
+                iconContainer.classList.remove('double-emoji');
             }
             
             document.getElementById('info-title').innerText = title;
@@ -1850,9 +1853,9 @@
                 sfxBuy();
                 // Evolution Newspaper
                 if(state.buildings[id] === 25) {
-                    showNewspaper(getText(`b${id}_n_t2`), getText('loc_new') + " Evolution!"); // simplified
+                    showNewspaper(getText(`b${id}_n_t2`), getText(`b${id}_d_t2`));
                 } else if(state.buildings[id] === 50) {
-                    showNewspaper(getText(`b${id}_n_t3`), "TIER 3 REACHED!");
+                    showNewspaper(getText(`b${id}_n_t3`), getText(`b${id}_d_t3`));
                 }
                 
                 // Win Condition Check
