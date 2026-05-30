@@ -642,6 +642,14 @@ main {
   padding: 0.75rem;
   display: grid;
   place-items: center;
+  overflow: hidden; /* Hide scrollbars by default */
+  scroll-behavior: smooth;
+}
+
+.modal-media.is-zoomed {
+  display: block;
+  overflow: auto; /* Enable native scrollbars when zoomed */
+  text-align: center;
 }
 
 .modal-media img,
@@ -650,6 +658,18 @@ main {
   max-height: 70vh;
   object-fit: contain;
   border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.modal-media img {
+  cursor: zoom-in;
+}
+
+.modal-media.is-zoomed img {
+  width: 250%; /* Force scale up */
+  max-width: 250%;
+  max-height: none;
+  cursor: zoom-out;
 }
 
 .modal-media video {
@@ -773,6 +793,11 @@ main {
   .modal-media img,
   .modal-media video {
     max-height: 55vh;
+  }
+
+  .modal-media.is-zoomed img {
+    width: 300%;
+    max-width: 300%;
   }
 
   .modal-close {

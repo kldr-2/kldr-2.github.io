@@ -5,55 +5,64 @@ const mediaItems = [
     type: "video",
     file: "MASK OFF.mp4",
     title: "MASK OFF // Motion",
-    size: "large"
+    size: "large",
+    category: "Motion Video"
   },
   {
     type: "image",
     file: "art room with man.jpg",
     title: "Art Room // Portrait",
-    size: "medium"
+    size: "medium",
+    category: "Photo Shoot"
   },
   {
     type: "image",
     file: "art room.jpg",
     title: "Art Room // Space",
-    size: "medium"
+    size: "medium",
+    category: "Photography"
   },
   {
     type: "image",
     file: "group portrait.jpg",
     title: "Group Portrait",
-    size: "large"
+    size: "large",
+    category: "Photo Shoot"
   },
   {
     type: "image",
     file: "pin board art.jpg",
     title: "Pin Board",
-    size: "small"
+    size: "small",
+    category: "Studio Photography"
   },
   {
     type: "image",
     file: "unnamed painting.jpg",
     title: "Unnamed // Canvas",
-    size: "medium"
+    size: "medium",
+    category: "Original Artwork"
   },
   {
     type: "image",
     file: "“Flash of the Spirit “ (sold).jpg",
     title: "Flash of the Spirit (Sold)",
-    size: "large"
+    size: "large",
+    category: "Original Artwork"
   },
   {
     type: "image",
     file: "“Two side of the coin”(sold).jpg",
     title: "Two Side of the Coin (Sold)",
-    size: "medium"
+    size: "medium",
+    category: "Original Artwork"
   },
   {
     type: "image",
     file: "🦎.jpg",
     title: "Lizard",
-    size: "small"
+    size: "small",
+    category: "Photography"
   }
 ];
 
@@ -80,6 +89,7 @@ const createArchiveCard = (item) => {
   card.dataset.title = item.title || "";
   card.dataset.file = item.file;
   card.dataset.type = item.type;
+  card.dataset.category = item.category || "Mixed Media";
 
   const frame = document.createElement("div");
   frame.className = "archive-frame";
@@ -127,10 +137,15 @@ const modalClose = document.getElementById("modal-close");
 const modalImage = document.getElementById("modal-image");
 const modalVideo = document.getElementById("modal-video");
 const modalTitle = document.getElementById("modal-title");
+const modalCategory = document.getElementById("modal-category");
+const modalMediaContainer = document.querySelector(".modal-media");
 
-const openModal = (title, file, type) => {
+const openModal = (title, file, type, category) => {
   if (!modal || !modalTitle || !file) return;
   modalTitle.textContent = title || "";
+  if (modalCategory) {
+    modalCategory.textContent = category || "";
+  }
   
   const fileUrl = encodeURI(`${basePath}${file}`);
 
@@ -143,6 +158,10 @@ const openModal = (title, file, type) => {
     modalVideo.src = "";
     modalImage.style.display = "block";
     modalImage.src = fileUrl;
+  }
+  
+  if (modalMediaContainer) {
+    modalMediaContainer.classList.remove("is-zoomed");
   }
 
   modal.classList.add("is-visible");
@@ -160,13 +179,46 @@ const closeModal = () => {
     modalVideo.pause();
     modalVideo.src = "";
   }
+  
+  if (modalMediaContainer) {
+    modalMediaContainer.classList.remove("is-zoomed");
+  }
 };
+
+if (modalImage && modalMediaContainer) {
+  modalImage.addEventListener("click", (e) => {
+    const isZoomingIn = !modalMediaContainer.classList.contains("is-zoomed");
+    
+    if (isZoomingIn) {
+      // Calculate click position relative to the image
+      const rect = modalImage.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+      
+      const widthRatio = clickX / rect.width;
+      const heightRatio = clickY / rect.height;
+
+      modalMediaContainer.classList.add("is-zoomed");
+      
+      // Scroll to the clicked area after layout updates
+      setTimeout(() => {
+        const newWidth = modalImage.clientWidth;
+        const newHeight = modalImage.clientHeight;
+        
+        modalMediaContainer.scrollLeft = (newWidth * widthRatio) - (modalMediaContainer.clientWidth / 2);
+        modalMediaContainer.scrollTop = (newHeight * heightRatio) - (modalMediaContainer.clientHeight / 2);
+      }, 50);
+    } else {
+      modalMediaContainer.classList.remove("is-zoomed");
+    }
+  });
+}
 
 if (archiveGrid) {
   archiveGrid.addEventListener("click", (event) => {
     const target = event.target.closest(".archive-card");
     if (!target) return;
-    openModal(target.dataset.title, target.dataset.file, target.dataset.type);
+    openModal(target.dataset.title, target.dataset.file, target.dataset.type, target.dataset.category);
   });
 }
 
