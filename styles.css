@@ -642,14 +642,7 @@ main {
   padding: 0.75rem;
   display: grid;
   place-items: center;
-  overflow: hidden; /* Hide scrollbars by default */
-  scroll-behavior: smooth;
-}
-
-.modal-media.is-zoomed {
-  display: block;
-  overflow: auto; /* Enable native scrollbars when zoomed */
-  text-align: center;
+  overflow: hidden;
 }
 
 .modal-media img,
@@ -658,18 +651,28 @@ main {
   max-height: 70vh;
   object-fit: contain;
   border-radius: 12px;
-  transition: all 0.3s ease;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translate(var(--drag-x, 0px), var(--drag-y, 0px)) scale(1);
+  will-change: transform;
 }
 
 .modal-media img {
   cursor: zoom-in;
 }
 
-.modal-media.is-zoomed img {
-  width: 250%; /* Force scale up */
-  max-width: 250%;
-  max-height: none;
-  cursor: zoom-out;
+.modal-media img.is-zoomed {
+  transform: translate(var(--drag-x, 0px), var(--drag-y, 0px)) scale(var(--zoom-scale, 2.5));
+  cursor: grab;
+  touch-action: none; /* Prevents mobile browser from trying to scroll the page while dragging */
+}
+
+.modal-media img.is-zoomed:active {
+  cursor: grabbing;
+}
+
+.modal-media img.is-dragging {
+  transition: none !important;
+  will-change: transform;
 }
 
 .modal-media video {
@@ -795,9 +798,8 @@ main {
     max-height: 55vh;
   }
 
-  .modal-media.is-zoomed img {
-    width: 300%;
-    max-width: 300%;
+  .modal-media img.is-zoomed {
+    --zoom-scale: 3.5;
   }
 
   .modal-close {

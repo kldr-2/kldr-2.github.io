@@ -140,6 +140,20 @@ const modalTitle = document.getElementById("modal-title");
 const modalCategory = document.getElementById("modal-category");
 const modalMediaContainer = document.querySelector(".modal-media");
 
+let zoomDragX = 0;
+let zoomDragY = 0;
+
+const resetZoomState = () => {
+  if (!modalImage) return;
+  modalImage.classList.remove("is-zoomed");
+  modalImage.classList.remove("is-dragging");
+  modalImage.style.transformOrigin = "center center";
+  zoomDragX = 0;
+  zoomDragY = 0;
+  modalImage.style.setProperty("--drag-x", "0px");
+  modalImage.style.setProperty("--drag-y", "0px");
+};
+
 const openModal = (title, file, type, category) => {
   if (!modal || !modalTitle || !file) return;
   modalTitle.textContent = title || "";
@@ -160,8 +174,8 @@ const openModal = (title, file, type, category) => {
     modalImage.src = fileUrl;
   }
   
-  if (modalMediaContainer) {
-    modalMediaContainer.classList.remove("is-zoomed");
+  if (modalImage) {
+    resetZoomState();
   }
 
   modal.classList.add("is-visible");
@@ -180,36 +194,76 @@ const closeModal = () => {
     modalVideo.src = "";
   }
   
-  if (modalMediaContainer) {
-    modalMediaContainer.classList.remove("is-zoomed");
+  if (modalImage) {
+    resetZoomState();
   }
 };
 
-if (modalImage && modalMediaContainer) {
-  modalImage.addEventListener("click", (e) => {
-    const isZoomingIn = !modalMediaContainer.classList.contains("is-zoomed");
-    
-    if (isZoomingIn) {
-      // Calculate click position relative to the image
-      const rect = modalImage.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const clickY = e.clientY - rect.top;
-      
-      const widthRatio = clickX / rect.width;
-      const heightRatio = clickY / rect.height;
+if (modalImage) {
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let hasDragged = false;
 
-      modalMediaContainer.classList.add("is-zoomed");
+  modalImage.addEventListener("pointerdown", (e) => {
+    if (!modalImage.classList.contains("is-zoomed")) return;
+    isDragging = true;
+    hasDragged = false;
+    startX = e.clientX - zoomDragX;
+    startY = e.clientY - zoomDragY;
+    modalImage.classList.add("is-dragging");
+    modalImage.setPointerCapture(e.pointerId);
+  });
+
+  modalImage.addEventListener("pointermove", (e) => {
+    if (!isDragging) return;
+    e.preventDefault(); // Prevent native scrolling on mobile while actively dragging
+    
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    
+    if (Math.abs(e.clientX - (startX + zoomDragX)) > 3 || Math.abs(e.clientY - (startY + zoomDragY)) > 3) {
+      hasDragged = true;
+    }
+
+    zoomDragX = dx;
+    zoomDragY = dy;
+    
+    modalImage.style.setProperty("--drag-x", `${zoomDragX}px`);
+    modalImage.style.setProperty("--drag-y", `${zoomDragY}px`);
+  });
+
+  const stopDrag = (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    modalImage.classList.remove("is-dragging");
+    modalImage.releasePointerCapture(e.pointerId);
+  };
+
+  modalImage.addEventListener("pointerup", stopDrag);
+  modalImage.addEventListener("pointercancel", stopDrag);
+
+  modalImage.addEventListener("click", (e) => {
+    if (hasDragged) {
+      hasDragged = false;
+      return;
+    }
+
+    const isZoomed = modalImage.classList.contains("is-zoomed");
+    
+    if (!isZoomed) {
+      const rect = modalImage.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
       
-      // Scroll to the clicked area after layout updates
-      setTimeout(() => {
-        const newWidth = modalImage.clientWidth;
-        const newHeight = modalImage.clientHeight;
-        
-        modalMediaContainer.scrollLeft = (newWidth * widthRatio) - (modalMediaContainer.clientWidth / 2);
-        modalMediaContainer.scrollTop = (newHeight * heightRatio) - (modalMediaContainer.clientHeight / 2);
-      }, 50);
+      modalImage.style.transformOrigin = `${x}% ${y}%`;
+      zoomDragX = 0;
+      zoomDragY = 0;
+      modalImage.style.setProperty("--drag-x", "0px");
+      modalImage.style.setProperty("--drag-y", "0px");
+      modalImage.classList.add("is-zoomed");
     } else {
-      modalMediaContainer.classList.remove("is-zoomed");
+      resetZoomState();
     }
   });
 }
