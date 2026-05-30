@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BJLG | Liquid Glass Gallery</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section class="hero" id="top">
+      <div class="hero-media" aria-hidden="true">
+        <video
+          id="backdrop-video"
+          class="backdrop-video"
+          autoplay
+          muted
+          loop
+          playsinline
+        ></video>
+        <div class="hero-blur"></div>
+        <div class="video-orb"></div>
+        <div class="hero-vignette"></div>
+      </div>
+
+      <header class="nav nav-hero">
+        <nav class="nav-links">
+          <a href="#archive">Archive</a>
+        </nav>
+        <img
+          class="nav-center nav-center-logo"
+          src="media content 2/juju logo.png"
+          alt="JUJU logo"
+        />
+        <a class="nav-action" href="#contact">Contact</a>
+      </header>
+
+      <div class="hero-logo-wrap">
+        <img
+          class="hero-logo"
+          src="media content 2/juju logo.png"
+          alt="JUJU logo"
+        />
+      </div>
+
+      <div class="hero-scroll" aria-hidden="true">
+        <svg
+          class="hero-scroll-icon"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.5"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+        </svg>
+      </div>
+    </section>
+
+    <main>
+      <section class="archive" id="archive">
+        <div class="section-head">
+          <h2>
+            Archive <span class="section-emphasis">Works</span>
+          </h2>
+          <p>Curated MMXXIV.</p>
+        </div>
+        <div id="archive-grid" class="archive-grid"></div>
+      </section>
+    </main>
+
+    <div id="artwork-modal" class="artwork-modal" aria-hidden="true">
+      <div class="modal-backdrop" id="modal-backdrop"></div>
+      <div class="modal-panel glass liquid-glass" role="dialog" aria-modal="true">
+        <button class="modal-close" id="modal-close" type="button" aria-label="Close">
+          <svg
+            class="modal-close-icon"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+        <div class="modal-media">
+          <img id="modal-image" alt="" />
+          <video id="modal-video" controls autoplay loop muted playsinline></video>
+        </div>
+        <div class="modal-info">
+          <h3 id="modal-title"></h3>
+          <p>Mixed Media · 2024</p>
+        </div>
+      </div>
+    </div>
+
+    <footer class="glass liquid-glass footer" id="contact">
+      <span>Barnabas Juhasz</span>
+      <span class="footer-links">
+        <a
+          href="https://www.instagram.com/barnabasjuhasz/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          @barnabasjuhasz
+        </a>
+        <a
+          href="https://www.instagram.com/jujus_shiiiiitttt/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          @jujus_shiiiiitttt
+        </a>
+      </span>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
