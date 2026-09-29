@@ -50,7 +50,8 @@ const state = {
   unsubTakes: null,
   roomEventUnsub: null,
   videoSyncing: false,
-  videoSyncedName: null
+  videoSyncedName: null,
+  syncProgress: 0
 };
 
 const el = (id) => document.getElementById(id);
@@ -159,6 +160,25 @@ async function authenticate(){
   }
 }
 
+function renderLobbyPlayers(players, hostId){
+  el('lobbyPlayerList').innerHTML = players.map(player => {
+    const progress = Number.isFinite(player.syncProgress) ? player.syncProgress : 0;
+    const isSyncing = !player.ready && progress > 0;
+    const status = player.ready
+      ? 'Ready'
+      : isSyncing
+        ? `<span>Syncing ${progress}%</span><span class="player-sync-bar"><span style="width:${progress}%"></span></span>`
+        : 'Waiting';
+    return `
+      <div class="player-row">
+        <div class="player-swatch" style="background:${player.color}"></div>
+        <div class="player-name">${player.name} ${player.id === hostId ? '(Host)' : ''}</div>
+        <div class="player-status ${player.ready ? 'ready' : ''}">${status}</div>
+      </div>
+    `;
+  }).join('');
+}
+
 el('singleplayerBtn').onclick = () => {
   state.isSingleplayer = true;
   state.uid = 'local_player';
@@ -239,13 +259,7 @@ el('joinRoomBtn').onclick = async () => {
     state.isHost = false;
     state.roomData = { ...data, players: [...data.players, state.me] };
     el('lobbyRoomCode').textContent = data.id;
-    el('lobbyPlayerList').innerHTML = state.roomData.players.map(player => `
-      <div class="player-row">
-        <div class="player-swatch" style="background:${player.color}"></div>
-        <div class="player-name">${player.name} ${player.id === data.hostId ? '(Host)' : ''}</div>
-        <div class="player-status ${player.ready ? 'ready' : ''}">${player.ready ? 'Ready' : 'Waiting'}</div>
-      </div>
-    `).join('');
+    renderLobbyPlayers(state.roomData.players, data.hostId);
     el('lobbyGuestUI').style.display = 'block';
     listenToRoom();
     switchScreen('lobbyScreen');
@@ -274,17 +288,7 @@ function listenToRoom(){
       
       // Update Lobby UI
       el('lobbyRoomCode').textContent = data.id;
-      el('lobbyPlayerList').innerHTML = '';
-      data.players.forEach(p => {
-        const row = document.createElement('div');
-        row.className = 'player-row';
-        row.innerHTML = `
-          <div class="player-swatch" style="background:${p.color}"></div>
-          <div class="player-name">${p.name} ${p.id === data.hostId ? '(Host)' : ''}</div>
-          <div class="player-status ${p.ready ? 'ready' : ''}">${p.ready ? 'Ready' : 'Waiting'}</div>
-        `;
-        el('lobbyPlayerList').appendChild(row);
-      });
+      renderLobbyPlayers(data.players, data.hostId);
 
       if(data.status === 'lobby'){
         if(state.isHost){
@@ -319,6 +323,7 @@ function listenToRoom(){
 async function syncHostVideo(roomData){
   if(state.videoSyncing || state.videoSyncedName === roomData.videoName) return;
   state.videoSyncing = true;
+  state.syncProgress = 0;
   el('reqFileName').textContent = roomData.videoName;
   el('syncProgressFill').style.width = '0%';
   el('syncProgressText').textContent = '0%';
@@ -327,6 +332,10 @@ async function syncHostVideo(roomData){
       el('syncProgressFill').style.width = `${progress}%`;
       el('syncProgressText').textContent = `${progress}%`;
       el('guestMatchUI').querySelector('.sync-progress').setAttribute('aria-valuenow', progress);
+      if(progress === 0 || progress === 100 || progress >= state.syncProgress + 5){
+        state.syncProgress = progress;
+        multiplayer.api.announcePlayer(state.roomId, { ...state.me, ready:false, syncProgress:progress }).catch(() => {});
+      }
     });
     el('syncProgressFill').style.width = '100%';
     el('syncProgressText').textContent = '100% - ready';
@@ -337,7 +346,7 @@ async function syncHostVideo(roomData){
     const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
     const updatedPlayers = state.roomData.players.map(p => p.id === state.uid ? {...p, ready: true} : p);
     state.roomData = { ...state.roomData, players: updatedPlayers };
-    await multiplayer.api.announcePlayer(state.roomId, state.me = { ...state.me, ready: true });
+    await multiplayer.api.announcePlayer(state.roomId, state.me = { ...state.me, ready: true, syncProgress:100 });
   } catch(error) {
     console.error('Host video sync error:', error);
     showNotice('Could not download the host video. Retrying shortly.');

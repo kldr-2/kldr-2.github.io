@@ -82,8 +82,10 @@
   .player-row { display: flex; align-items: center; gap: 10px; background: var(--bg-well); padding: 10px 14px; border-radius: var(--radius-small); border: 1px solid var(--line); }
   .player-swatch { width: 12px; height: 12px; border-radius: 50%; }
   .player-name { flex: 1; font-size: 14px; font-weight: 500; }
-  .player-status { font-size: 12px; font-family: var(--font-mono); color: var(--text-dim); }
+  .player-status { display:flex; align-items:center; gap:7px; font-size:12px; font-family:var(--font-mono); color: var(--text-dim); }
   .player-status.ready { color: var(--green); }
+  .player-sync-bar{ display:inline-block; width:42px; height:4px; overflow:hidden; background:var(--line); border-radius:99px; }
+  .player-sync-bar span{ display:block; height:100%; background:var(--accent); transition:width .15s linear; }
 
   .dropzone{
     margin-top:20px; padding: 24px 20px; border: 1.5px dashed var(--line); border-radius: 10px; background: var(--bg-well); cursor:pointer;
