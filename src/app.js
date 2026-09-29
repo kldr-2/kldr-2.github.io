@@ -319,7 +319,7 @@ function listenToRoom(){
 async function syncHostVideo(roomData){
   if(state.videoSyncing || state.videoSyncedName === roomData.videoName) return;
   state.videoSyncing = true;
-  el('reqFileName').textContent = `${roomData.videoName} (downloading...)`;
+  el('reqFileName').textContent = roomData.videoName;
   el('syncProgressFill').style.width = '0%';
   el('syncProgressText').textContent = '0%';
   try {
