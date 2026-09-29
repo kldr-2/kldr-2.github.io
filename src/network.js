@@ -14,6 +14,7 @@ export function createMultiplayerClient() {
   const pending = new Map();
   const videoStore = new Map();
   const listeners = new Map();
+  const roomEventListeners = new Map();
 
   async function loadPeer(){
     if(!Peer) ({ Peer } = await import('https://esm.sh/peerjs@1.5.4'));
@@ -30,6 +31,10 @@ export function createMultiplayerClient() {
 
   function notify(path, data){
     (listeners.get(path) || []).forEach(listener => listener(data));
+  }
+
+  function notifyRoomEvent(roomId, event){
+    (roomEventListeners.get(roomId) || []).forEach(listener => listener(event));
   }
 
   function snapshot(data){
@@ -110,7 +115,16 @@ export function createMultiplayerClient() {
     });
   }
 
+  function broadcastRoomEvent(roomId, event){
+    notifyRoomEvent(roomId, event);
+    hostConnections.forEach(connection => send(connection, { type: 'room-event', roomId, event }));
+  }
+
   async function handleHostMessage(connection, message){
+    if(message.type === 'room-event'){
+      broadcastRoomEvent(message.roomId, message.event);
+      return;
+    }
     if(message.type === 'player-presence'){
       const room = hostRoomData.get(message.roomId);
       if(!room) return;
@@ -170,6 +184,10 @@ export function createMultiplayerClient() {
 
   const videoDownloads = new Map();
   function handleGuestMessage(roomId, message){
+    if(message.type === 'room-event'){
+      notifyRoomEvent(roomId, message.event);
+      return;
+    }
     if(message.type === 'snapshot'){
       notify(message.path, message.data);
       return;
@@ -278,6 +296,23 @@ export function createMultiplayerClient() {
     async announcePlayer(roomId, player) {
       const connection = await ensureGuest(roomId);
       send(connection, { type: 'player-presence', roomId, player });
+    },
+    async sendRoomEvent(roomId, event) {
+      if(hostRoomId === roomId && peerReady){
+        broadcastRoomEvent(roomId, event);
+        return;
+      }
+      const connection = await ensureGuest(roomId);
+      send(connection, { type: 'room-event', roomId, event });
+    },
+    onRoomEvent(roomId, callback) {
+      const current = roomEventListeners.get(roomId) || [];
+      roomEventListeners.set(roomId, [...current, callback]);
+      return () => {
+        const remaining = (roomEventListeners.get(roomId) || []).filter(listener => listener !== callback);
+        if(remaining.length) roomEventListeners.set(roomId, remaining);
+        else roomEventListeners.delete(roomId);
+      };
     },
     onSnapshot(ref, callback, onError) {
       const current = listeners.get(ref) || [];

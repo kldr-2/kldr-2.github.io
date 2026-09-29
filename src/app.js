@@ -48,6 +48,7 @@ const state = {
   liveTrace: [],
   unsubRoom: null,
   unsubTakes: null,
+  roomEventUnsub: null,
   videoSyncing: false,
   videoSyncedName: null
 };
@@ -82,6 +83,7 @@ el('savedDubsBackBtn').onclick = () => switchScreen('setupScreen');
 function resetToMenu() {
   if (state.unsubRoom) { state.unsubRoom(); state.unsubRoom = null; }
   if (state.unsubTakes) { state.unsubTakes(); state.unsubTakes = null; }
+  if (state.roomEventUnsub) { state.roomEventUnsub(); state.roomEventUnsub = null; }
   
   stopPlayback();
   
@@ -260,6 +262,8 @@ el('joinRoomBtn').onclick = async () => {
 };
 
 function listenToRoom(){
+  if(state.roomEventUnsub) state.roomEventUnsub();
+  state.roomEventUnsub = multiplayer.api.onRoomEvent(state.roomId, handleRoomEvent);
   loadFirebase().then(fb => {
     if(!fb) return;
     const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
@@ -666,8 +670,8 @@ function checkRecordAbility(){
   el('reviewBtn').disabled = takeCount === 0;
 }
 
-function selectFragment(idx, skipRedraw = false){
-  stopPlayback();
+function selectFragment(idx, skipRedraw = false, isRemote = false){
+  stopPlayback(isRemote);
   state.currentIndex = idx;
   const f = state.fragments[idx];
   if(!f) return;
@@ -943,6 +947,34 @@ function setPauseButton(mode){
   else { btn.textContent = 'Pause'; btn.disabled = true; }
 }
 
+function sendPlaybackEvent(event){
+  if(state.isSingleplayer || !state.roomId) return;
+  multiplayer.api.sendRoomEvent(state.roomId, { ...event, originUid: state.uid, playerName: state.me?.name }).catch(error => {
+    console.error('Playback sync error:', error);
+  });
+}
+
+function handleRoomEvent(event){
+  if(!event || event.originUid === state.uid) return;
+  if(event.action === 'start'){
+    const index = state.fragments.findIndex(fragment => fragment.id === event.fragmentId);
+    if(index < 0) return;
+    selectFragment(index, true, true);
+    const remoteMode = 'original';
+    playFragment(remoteMode, true, event.mode === 'record' ? `${event.playerName || 'Player'} recording` : 'Synced playback');
+    return;
+  }
+  if(event.action === 'pause'){
+    pausePlayback(true);
+    return;
+  }
+  if(event.action === 'resume'){
+    resumePlayback(true);
+    return;
+  }
+  if(event.action === 'stop') finishPlayback(true);
+}
+
 function startReviewSources(pb, offsetSeconds){
   const ctx = ensureCtx();
   const takes = state.takes[pb.frag.id] || {};
@@ -961,8 +993,8 @@ function startReviewSources(pb, offsetSeconds){
   pb.sourcesOffsetAtStart = offsetSeconds;
 }
 
-async function playFragment(mode){
-  stopPlayback();
+async function playFragment(mode, isRemote = false, remoteLabel = ''){
+  stopPlayback(isRemote);
   const f = state.fragments[state.currentIndex];
   if(!f) return;
   const ctx = ensureCtx();
@@ -987,7 +1019,7 @@ async function playFragment(mode){
     else { v.onseeked = () => { v.onseeked=null; r(); }; setTimeout(r, 300); }
   });
 
-  state.pb = { mode, frag: f, sources: [], recorder: null, chunks: [], analyser: null, sourcesOffsetAtStart: 0 };
+  state.pb = { mode, frag: f, sources: [], recorder: null, chunks: [], analyser: null, sourcesOffsetAtStart: 0, remote: isRemote };
   
   if(mode === 'record'){
     const micSrc = ctx.createMediaStreamSource(state.micStream);
@@ -1010,9 +1042,10 @@ async function playFragment(mode){
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
   } else {
     v.volume = 1.0;
-    el('monitorBadgeText').textContent = "Original"; el('monitorBadge').classList.remove('live');
+    el('monitorBadgeText').textContent = remoteLabel || "Original"; el('monitorBadge').classList.toggle('live', Boolean(remoteLabel));
   }
 
+  if(!isRemote) sendPlaybackEvent({ action:'start', mode, fragmentId:f.id });
   state.isPlaying = true; state.paused = false;
   setPauseButton('playing');
   v.play();
@@ -1040,7 +1073,7 @@ function runLoop(){
     drawWave(f, progress);
     
     if(v.currentTime >= f.end - 0.05 || v.ended){
-      finishPlayback();
+      finishPlayback(pb.remote);
     } else {
       state.rafId = requestAnimationFrame(loop);
     }
@@ -1048,7 +1081,7 @@ function runLoop(){
   state.rafId = requestAnimationFrame(loop);
 }
 
-function pausePlayback(){
+function pausePlayback(isRemote = false){
   const pb = state.pb;
   if(!pb || !state.isPlaying || state.paused) return;
   state.paused = true;
@@ -1067,9 +1100,10 @@ function pausePlayback(){
   }
   el('monitorBadgeText').textContent = "Paused"; el('monitorBadge').classList.remove('live');
   setPauseButton('paused');
+  if(!isRemote) sendPlaybackEvent({ action:'pause' });
 }
 
-function resumePlayback(){
+function resumePlayback(isRemote = false){
   const pb = state.pb;
   if(!pb || !state.paused) return;
   state.paused = false;
@@ -1086,6 +1120,7 @@ function resumePlayback(){
   v.play();
   setPauseButton('playing');
   runLoop();
+  if(!isRemote) sendPlaybackEvent({ action:'resume' });
 }
 
 el('pauseBtn').onclick = () => {
@@ -1093,7 +1128,7 @@ el('pauseBtn').onclick = () => {
   else if(state.isPlaying) pausePlayback();
 };
 
-function finishPlayback(){
+function finishPlayback(isRemote = false){
   state.isPlaying = false; state.paused = false;
   if(state.rafId){ cancelAnimationFrame(state.rafId); state.rafId = null; }
   const v = el('mainVideo');
@@ -1154,9 +1189,10 @@ function finishPlayback(){
   }
   state.pb = null;
   drawWave(state.fragments[state.currentIndex]);
+  if(!isRemote) sendPlaybackEvent({ action:'stop' });
 }
 
-function stopPlayback(){
+function stopPlayback(isRemote = false){
   // Full abort (switching fragments, leaving studio, etc) -- discards any in-flight recording.
   state.isPlaying = false; state.paused = false;
   if(state.rafId){ cancelAnimationFrame(state.rafId); state.rafId = null; }
@@ -1172,6 +1208,7 @@ function stopPlayback(){
   state.pb = null;
   el('monitorBadgeText').textContent = "Idle"; el('monitorBadge').classList.remove('live');
   setPauseButton('idle');
+  if(!isRemote) sendPlaybackEvent({ action:'stop' });
 }
 
 el('listenBtn').onclick = () => playFragment('original');
