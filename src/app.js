@@ -480,7 +480,7 @@ function buildEnvelope(buffer, targetRate){
    (often lead vocals/dialogue) is correlated across channels and
    cancels out, while off-center content (music, ambience) survives.
    It only works on true stereo sources, and it's a heuristic, not
-   real source separation â€” some background elements will thin out
+  real source separation -- some background elements will thin out
    too, and mono clips can't be processed this way at all. */
 function buildVocalReducedBuffer(buffer){
   if(!buffer || buffer.numberOfChannels < 2) return null;
@@ -907,7 +907,7 @@ function renderFragmentList(){
     row.innerHTML = `
       <span class="frag-num">${String(i+1).padStart(2,'0')}</span>
       <div class="frag-info">
-        <span class="frag-time">${f.start.toFixed(1)}s â€“ ${f.end.toFixed(1)}s</span>
+        <span class="frag-time">${f.start.toFixed(1)}s - ${f.end.toFixed(1)}s</span>
         <div class="frag-assignees">${assignHTML}</div>
       </div>
     `;
@@ -919,7 +919,7 @@ function renderFragmentList(){
       mergeRow.className = 'merge-row';
       const btn = document.createElement('button');
       btn.className = 'merge-btn';
-      btn.textContent = 'âŒƒ merge with next';
+      btn.textContent = 'Merge with next';
       btn.onclick = (ev) => { ev.stopPropagation(); mergeWithNext(i); };
       mergeRow.appendChild(btn);
       list.appendChild(mergeRow);
@@ -929,9 +929,9 @@ function renderFragmentList(){
 
 function setPauseButton(mode){
   const btn = el('pauseBtn');
-  if(mode === 'paused'){ btn.textContent = 'â–¶ Resume'; btn.disabled = false; }
-  else if(mode === 'playing'){ btn.textContent = 'â¸ Pause'; btn.disabled = false; }
-  else { btn.textContent = 'â¸ Pause'; btn.disabled = true; }
+  if(mode === 'paused'){ btn.textContent = 'Resume'; btn.disabled = false; }
+  else if(mode === 'playing'){ btn.textContent = 'Pause'; btn.disabled = false; }
+  else { btn.textContent = 'Pause'; btn.disabled = true; }
 }
 
 function startReviewSources(pb, offsetSeconds){
@@ -963,7 +963,7 @@ async function playFragment(mode){
     try{
       if(!state.micStream) state.micStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}});
     }catch(err){
-      showNotice("Microphone access was blocked or unavailable â€” allow microphone access to record a take.");
+      showNotice("Microphone access was blocked or unavailable - allow microphone access to record a take.");
       return;
     }
   }
@@ -1148,7 +1148,7 @@ function finishPlayback(){
 }
 
 function stopPlayback(){
-  // Full abort (switching fragments, leaving studio, etc) â€” discards any in-flight recording.
+  // Full abort (switching fragments, leaving studio, etc) -- discards any in-flight recording.
   state.isPlaying = false; state.paused = false;
   if(state.rafId){ cancelAnimationFrame(state.rafId); state.rafId = null; }
   const v = el('mainVideo');
@@ -1261,8 +1261,8 @@ el('renderBtn').onclick = async () => {
   el('downloadLink').classList.add('show');
   el('renderBtn').disabled = false;
   el('renderStatus').textContent = usedFallback
-    ? 'Done â€” mono source, so background bed includes the original voice too.'
-    : 'Done â€” background music/noise carried through with the voice removed.';
+    ? 'Done - mono source, so background bed includes the original voice too.'
+    : 'Done - background music/noise carried through with the voice removed.';
   setTimeout(() => el('renderProgress').classList.remove('show'), 1000);
 };
 
