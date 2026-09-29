@@ -9,15 +9,8 @@ let firebaseModules = null;
 
 async function loadFirebase(){
   if(firebaseModules) return firebaseModules;
-  try {
-    await multiplayer.api.getDoc('healthcheck');
-    firebaseModules = multiplayer.api;
-    return firebaseModules;
-  } catch (error) {
-    console.error('Multiplayer connection error:', error);
-    showNotice('Could not connect to the multiplayer server. Start it with npm run dev.');
-    return null;
-  }
+  firebaseModules = multiplayer.api;
+  return firebaseModules;
 }
 
 const PLAYER_COLORS = ['#B285F5', '#10B981', '#E8A33D', '#3B82F6'];
@@ -224,36 +217,46 @@ el('joinRoomBtn').onclick = async () => {
   const name = el('playerNameInput').value.trim() || 'Guest';
   const roomId = el('roomCodeInput').value.trim().toUpperCase();
   if(roomId.length !== 5) return showNotice("Invalid room code format.");
-  
-  const ok = await authenticate();
-  if(!ok) return;
-  const fb = await loadFirebase();
-  if(!fb) return;
+  try {
+    const ok = await authenticate();
+    if(!ok) return;
+    const fb = await loadFirebase();
+    if(!fb) return;
 
-  const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
-  const snap = await fb.getDoc(roomRef);
-  
-  if(!snap.exists()){
+    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+    const snap = await fb.getDoc(roomRef);
+    if(!snap.exists()) return showNotice("Room not found.");
+
+    const data = snap.data();
+    if(data.players.length >= 4) return showNotice("Room is full.");
+    if(data.status !== 'lobby') return showNotice("Room already started.");
+
+    const color = PLAYER_COLORS[data.players.length];
+    state.me = { id: state.uid, name, color, ready: false };
+    state.roomId = roomId;
+    state.isHost = false;
+    state.roomData = { ...data, players: [...data.players, state.me] };
+    el('lobbyRoomCode').textContent = data.id;
+    el('lobbyPlayerList').innerHTML = state.roomData.players.map(player => `
+      <div class="player-row">
+        <div class="player-swatch" style="background:${player.color}"></div>
+        <div class="player-name">${player.name} ${player.id === data.hostId ? '(Host)' : ''}</div>
+        <div class="player-status ${player.ready ? 'ready' : ''}">${player.ready ? 'Ready' : 'Waiting'}</div>
+      </div>
+    `).join('');
+    el('lobbyGuestUI').style.display = 'block';
+    listenToRoom();
+    switchScreen('lobbyScreen');
+    fb.updateDoc(roomRef, { players: state.roomData.players }).catch(error => {
+      console.error('Join room sync error:', error);
+      showNotice('Connected to the room, but the player list is still syncing.');
+    });
+  } catch(error) {
+    console.error('Join room error:', error);
+    showNotice(error.message || 'Could not join that room.');
+  } finally {
     el('setupLoader').style.display = 'none';
-    return showNotice("Room not found.");
   }
-  
-  const data = snap.data();
-  if(data.players.length >= 4){ el('setupLoader').style.display = 'none'; return showNotice("Room is full."); }
-  if(data.status !== 'lobby'){ el('setupLoader').style.display = 'none'; return showNotice("Room already started."); }
-  
-  const color = PLAYER_COLORS[data.players.length];
-  state.me = { id: state.uid, name, color, ready: false };
-  
-  await fb.updateDoc(roomRef, {
-    players: [...data.players, state.me]
-  });
-  
-  state.roomId = roomId;
-  state.isHost = false;
-  listenToRoom();
-  switchScreen('lobbyScreen');
-  el('setupLoader').style.display = 'none';
 };
 
 function listenToRoom(){
@@ -314,10 +317,7 @@ async function syncHostVideo(roomData){
   state.videoSyncing = true;
   el('reqFileName').textContent = `${roomData.videoName} (downloading...)`;
   try {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(state.roomId)}/video`);
-    if(!response.ok) throw new Error('Host video is not available yet.');
-    const blob = await response.blob();
-    state.file = new File([blob], roomData.videoName, { type: blob.type || 'video/mp4' });
+    state.file = await multiplayer.api.downloadVideo(state.roomId);
     state.videoSyncedName = roomData.videoName;
     state.me.ready = true;
     const fb = await loadFirebase();
@@ -352,12 +352,7 @@ el('hostFileInput').onchange = async (e) => {
   const fb = await loadFirebase();
   if(!fb) return;
   try {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(state.roomId)}/video`, {
-      method: 'POST',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      body: file
-    });
-    if(!response.ok) throw new Error('Video upload failed.');
+    await multiplayer.api.uploadVideo(state.roomId, file);
   } catch(error) {
     console.error('Host video upload error:', error);
     state.file = null;
