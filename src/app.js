@@ -1,5 +1,4 @@
 ﻿
-import './styles.css';
 import { createMultiplayerClient } from './network.js';
 
 const appId = 'loop-booth-mp';
@@ -55,7 +54,9 @@ const state = {
   pb: null,
   liveTrace: [],
   unsubRoom: null,
-  unsubTakes: null
+  unsubTakes: null,
+  videoSyncing: false,
+  videoSyncedName: null
 };
 
 const el = (id) => document.getElementById(id);
@@ -105,6 +106,8 @@ function resetToMenu() {
   state.envelope = null;
   state.masterBuffer = null;
   state.backgroundBuffer = null;
+  state.videoSyncing = false;
+  state.videoSyncedName = null;
   state.fragments = [];
   state.takes = {};
   state.currentIndex = 0;
@@ -116,6 +119,7 @@ function resetToMenu() {
   el('lobbyHostUI').style.display = 'none';
   el('lobbyGuestUI').style.display = 'none';
   el('startStudioBtn').disabled = true;
+  el('hostFileInput').value = '';
   el('hostDropzone').textContent = 'Click or drop a video file here';
   
   switchScreen('setupScreen');
@@ -286,6 +290,7 @@ function listenToRoom(){
             el('guestWaitText').style.display = 'none';
             el('guestMatchUI').style.display = 'block';
             el('reqFileName').textContent = data.videoName;
+            syncHostVideo(data);
           } else if (state.me.ready) {
             el('guestMatchUI').style.display = 'none';
             el('guestWaitText').style.display = 'block';
@@ -302,6 +307,30 @@ function listenToRoom(){
       }
     }, (err) => console.error("Room sync error", err));
   });
+}
+
+async function syncHostVideo(roomData){
+  if(state.videoSyncing || state.videoSyncedName === roomData.videoName) return;
+  state.videoSyncing = true;
+  el('reqFileName').textContent = `${roomData.videoName} (downloading...)`;
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(state.roomId)}/video`);
+    if(!response.ok) throw new Error('Host video is not available yet.');
+    const blob = await response.blob();
+    state.file = new File([blob], roomData.videoName, { type: blob.type || 'video/mp4' });
+    state.videoSyncedName = roomData.videoName;
+    state.me.ready = true;
+    const fb = await loadFirebase();
+    if(!fb) return;
+    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+    const updatedPlayers = state.roomData.players.map(p => p.id === state.uid ? {...p, ready: true} : p);
+    await fb.updateDoc(roomRef, { players: updatedPlayers });
+  } catch(error) {
+    console.error('Host video sync error:', error);
+    showNotice('Could not download the host video. Retrying shortly.');
+  } finally {
+    state.videoSyncing = false;
+  }
 }
 
 // Host File Selection
@@ -322,6 +351,19 @@ el('hostFileInput').onchange = async (e) => {
   
   const fb = await loadFirebase();
   if(!fb) return;
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(state.roomId)}/video`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file
+    });
+    if(!response.ok) throw new Error('Video upload failed.');
+  } catch(error) {
+    console.error('Host video upload error:', error);
+    state.file = null;
+    el('hostDropzone').textContent = 'Click or drop a video file here';
+    return showNotice('Could not upload the video to the room.');
+  }
   const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
   
   // Set host ready
@@ -333,23 +375,6 @@ el('hostFileInput').onchange = async (e) => {
     players: updatedPlayers
   });
   el('hostDropzone').textContent = `Selected: ${file.name}`;
-};
-
-// Guest File Selection
-el('guestSelectFileBtn').onclick = () => el('guestFileInput').click();
-el('guestFileInput').onchange = async (e) => {
-  const file = e.target.files[0];
-  if(!file) return;
-  if(file.name !== state.roomData.videoName || file.size !== state.roomData.videoSize){
-    return showNotice("File mismatch! Please select the exact file the host used.");
-  }
-  
-  state.file = file;
-  const updatedPlayers = state.roomData.players.map(p => p.id === state.uid ? {...p, ready: true} : p);
-  const fb = await loadFirebase();
-  if(!fb) return;
-  const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-  await fb.updateDoc(roomRef, { players: updatedPlayers });
 };
 
 el('startStudioBtn').onclick = async () => {

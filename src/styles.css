@@ -169,6 +169,26 @@
   .download-link{ display:none; align-items:center; gap:8px; background: var(--green); color:#0D1B08; font-weight:600; padding:10px 16px; border-radius: var(--radius-small); text-decoration:none; font-size:13.5px; }
   .download-link.show{ display:inline-flex; }
 
+  @media (max-width: 600px){
+    #setupScreen, #lobbyScreen, #savedDubsScreen{ padding: 16px; }
+    .setup-card, .lobby-card{ padding: 22px 18px; }
+    .setup-actions{ flex-direction: column; }
+    .setup-actions > div{ width: 100%; }
+    .topbar{ align-items: flex-start; flex-direction: column; padding: 12px 14px; }
+    .topbar-left, .topbar-right{ width: 100%; }
+    .topbar-left{ gap: 8px; flex-wrap: wrap; }
+    .topbar-right{ justify-content: flex-end; }
+    .workspace{ padding: 12px 14px 0; gap: 12px; }
+    .transport{ gap: 8px; }
+    .transport .btn:not(.btn-icon){ flex: 1 1 calc(50% - 8px); justify-content: center; }
+    .transport-spacer{ display: none; }
+    .master-panel{ margin: 12px 14px 14px; }
+    .render-bar{ padding: 12px 14px; }
+    .render-bar > div:first-child{ display: none; }
+    .render-bar .btn, .download-link{ flex: 1; justify-content: center; }
+    .render-progress{ width: 100%; order: 3; }
+  }
+
   .notice{ display:none; align-items:flex-start; gap:10px; background: rgba(214,88,74,0.1); border:1px solid var(--red-dim); color:#F0C4BC; border-radius: var(--radius-small); padding: 10px 13px; font-size:13px; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); max-width: 90vw; }
   .notice.show{ display:flex; }
   .sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }

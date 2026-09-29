@@ -8,6 +8,7 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 5173);
 const rooms = new Map();
 const takes = new Map();
+const roomVideos = new Map();
 const subscriptions = new Map();
 
 function roomKey(path) {
@@ -56,7 +57,49 @@ function updatePath(path, data) {
 }
 
 const httpServer = createServer(async (request, response) => {
-  const requested = request.url === '/' ? '/index.html' : request.url;
+  const requestUrl = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
+  const videoMatch = requestUrl.pathname.match(/^\/api\/rooms\/([A-Z0-9]{5})\/video$/);
+
+  if (videoMatch && request.method === 'POST') {
+    const roomId = videoMatch[1];
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of request) {
+      size += chunk.length;
+      if (size > 250 * 1024 * 1024) {
+        response.writeHead(413, { 'Content-Type': 'text/plain' });
+        response.end('Video is too large. Maximum size is 250 MB.');
+        request.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    }
+    roomVideos.set(roomId, {
+      body: Buffer.concat(chunks),
+      type: request.headers['content-type'] || 'application/octet-stream'
+    });
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+
+  if (videoMatch && request.method === 'GET') {
+    const video = roomVideos.get(videoMatch[1]);
+    if (!video) {
+      response.writeHead(404, { 'Content-Type': 'text/plain' });
+      response.end('Room video not found');
+      return;
+    }
+    response.writeHead(200, {
+      'Content-Type': video.type,
+      'Content-Length': video.body.length,
+      'Cache-Control': 'no-store'
+    });
+    response.end(video.body);
+    return;
+  }
+
+  const requested = requestUrl.pathname === '/' ? '/index.html' : requestUrl.pathname;
   const safePath = normalize(requested).replace(/^([.][.][/\\])+/, '');
   const filePath = join(root, safePath);
   try {

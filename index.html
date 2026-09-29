@@ -1,13 +1,13 @@
 ﻿<!doctype html>
-<html lang="en>
+<html lang="en">
 <head>
-<meta charset="UTF-8>
-<meta name="viewport" content="width=device-width, initial-scale=1.0>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Loop Booth</title>
-<link rel="preconnect" href="https://fonts.googleapis.com>
-<link rel="preconnect" href="https://fonts.gstatic.com>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet>
-<link rel="stylesheet" href="/src/styles.css>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/styles.css">
 </head>
 <body>
 
@@ -26,7 +26,7 @@
 </div>
 
 <div id="setupScreen" class="screen active">
-  <button class="btn btn-ghost" id="savedDubsBtn" style="position: absolute; bottom: 20px; right: 20px; font-size: 13px;">â‰¡ Saved Dubs</button>
+  <button class="btn btn-ghost" id="savedDubsBtn" style="position: absolute; bottom: 20px; right: 20px; font-size: 13px;">Saved Dubs</button>
   <div class="setup-card">
     <div style="display:flex; justify-content:center; gap:10px; margin-bottom: 20px;">
       <div style="width:12px; height:12px; border-radius:50%; background:var(--p1-color);"></div>
@@ -61,7 +61,7 @@
 
 <div id="lobbyScreen" class="screen">
   <div style="position: absolute; top: 20px; left: 20px;">
-    <button class="btn btn-ghost" id="lobbyBackBtn" style="font-size: 13px;">â† Back to Menu</button>
+    <button class="btn btn-ghost" id="lobbyBackBtn" style="font-size: 13px;">Back to Menu</button>
   </div>
   <div class="lobby-card">
     <h2>Lobby Code</h2>
@@ -81,9 +81,7 @@
     <div id="lobbyGuestUI" style="display:none; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px;">
       <p id="guestWaitText" style="font-size:14px; color: var(--accent);">Waiting for host to select a video...</p>
       <div id="guestMatchUI" style="display:none;">
-        <p style="font-size:14px; margin-bottom:10px;">The host selected <strong id="reqFileName"></strong>. Please select the exact same file from your computer to sync.</p>
-        <button class="btn" id="guestSelectFileBtn">Select Sync File</button>
-        <input type="file" id="guestFileInput" accept="video/*" class="sr-only">
+        <p style="font-size:14px; color:var(--text-dim);">Syncing <strong id="reqFileName"></strong> from the host. You can join as soon as it is ready.</p>
       </div>
     </div>
   </div>
@@ -91,7 +89,7 @@
 
 <div id="savedDubsScreen" class="screen" style="align-items: center; justify-content: center; padding: 20px;">
   <div style="position: absolute; top: 20px; left: 20px;">
-    <button class="btn btn-ghost" id="savedDubsBackBtn" style="font-size: 13px;">â† Back to Menu</button>
+    <button class="btn btn-ghost" id="savedDubsBackBtn" style="font-size: 13px;">Back to Menu</button>
   </div>
   <div class="setup-card" style="max-width: 500px; width: 100%;">
     <h2 style="font-size: 20px; margin-bottom: 20px;">Saved Dubs</h2>
@@ -104,7 +102,7 @@
 <div id="studioScreen" class="screen">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="btn btn-ghost" id="studioBackBtn" style="padding: 6px 10px; font-size: 12px;">â† Menu</button>
+      <button class="btn btn-ghost" id="studioBackBtn" style="padding: 6px 10px; font-size: 12px;">Menu</button>
       <span class="room-badge" id="studioRoomBadge">Room: ---</span>
       <span id="studioPlayerNames" style="font-size: 13px; color: var(--text-dim);"></span>
     </div>
@@ -138,14 +136,14 @@
       </div>
 
       <div class="transport">
-        <button class="btn" id="listenBtn">â–· Listen Original</button>
-        <button class="btn btn-primary btn-rec" id="recordBtn" disabled="">â— Record Take</button>
-        <button class="btn" id="reviewBtn" disabled="">â–· Play Takes</button>
-        <button class="btn" id="pauseBtn" disabled="">â¸ Pause</button>
+        <button class="btn" id="listenBtn">Listen Original</button>
+        <button class="btn btn-primary btn-rec" id="recordBtn" disabled="">Record Take</button>
+        <button class="btn" id="reviewBtn" disabled="">Play Takes</button>
+        <button class="btn" id="pauseBtn" disabled="">Pause</button>
         <div class="transport-spacer"></div>
         <div style="display:flex; align-items:center; gap:6px;">
-          <button class="btn btn-icon" id="prevFragBtn">â€¹</button>
-          <button class="btn btn-icon" id="nextFragBtn">â€º</button>
+          <button class="btn btn-icon" id="prevFragBtn" aria-label="Previous line">&lt;</button>
+          <button class="btn btn-icon" id="nextFragBtn" aria-label="Next line">&gt;</button>
         </div>
       </div>
     </div>
@@ -154,7 +152,7 @@
       <div class="sidebar-head">
         <h2>Lines</h2>
         <div class="sidebar-actions">
-          <button class="btn btn-ghost undo-btn" id="undoBtn" disabled="" title="Undo last split or merge">â†º Undo</button>
+          <button class="btn btn-ghost undo-btn" id="undoBtn" disabled="" title="Undo last split or merge">Undo</button>
           <label class="edit-toggle" id="editToggle" title="Host only: click master timeline to split">
             <input type="checkbox" id="editToggleInput"> edit splits (Host)
           </label>
@@ -173,7 +171,7 @@
     <div style="flex:1;"></div>
     <span id="renderStatus" style="font-size:13px; color: var(--text-dim);"></span>
     <div class="render-progress" id="renderProgress"><div class="render-progress-fill" id="renderProgressFill"></div></div>
-    <a class="download-link" id="downloadLink" download="loop-booth-mp-dub.webm">â¬‡ Download Final</a>
+    <a class="download-link" id="downloadLink" download="loop-booth-mp-dub.webm">Download Final</a>
     <button class="btn btn-primary" id="renderBtn">Print Final Dub</button>
   </div>
 </div>
