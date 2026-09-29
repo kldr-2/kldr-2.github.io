@@ -63,6 +63,7 @@
   /* Screens */
   .screen { display: none; min-height: 100vh; flex-direction: column; }
   .screen.active { display: flex; }
+  .version-footer{ position:absolute; left:20px; bottom:20px; color:var(--text-faint); font-family:var(--font-mono); font-size:11px; letter-spacing:.04em; }
 
   /* Auth / Setup */
   #setupScreen { align-items: center; justify-content: center; padding: 20px; }
