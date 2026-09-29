@@ -1,0 +1,187 @@
+﻿<!doctype html>
+<html lang="en>
+<head>
+<meta charset="UTF-8>
+<meta name="viewport" content="width=device-width, initial-scale=1.0>
+<title>Loop Booth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com>
+<link rel="preconnect" href="https://fonts.gstatic.com>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet>
+<link rel="stylesheet" href="/src/styles.css>
+</head>
+<body>
+
+
+<div class="notice" id="notice"><span id="noticeText"></span><button class="btn-ghost" id="noticeDismiss" style="padding:2px 6px; font-size:12px;">dismiss</button></div>
+
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-card">
+    <div class="modal-title" id="confirmTitle">Confirm</div>
+    <div class="modal-desc" id="confirmDesc">Are you sure?</div>
+    <div class="modal-actions">
+      <button class="btn" id="confirmCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="confirmOkBtn" style="background:var(--red); border-color:var(--red-dim);">Leave</button>
+    </div>
+  </div>
+</div>
+
+<div id="setupScreen" class="screen active">
+  <button class="btn btn-ghost" id="savedDubsBtn" style="position: absolute; bottom: 20px; right: 20px; font-size: 13px;">â‰¡ Saved Dubs</button>
+  <div class="setup-card">
+    <div style="display:flex; justify-content:center; gap:10px; margin-bottom: 20px;">
+      <div style="width:12px; height:12px; border-radius:50%; background:var(--p1-color);"></div>
+      <div style="width:12px; height:12px; border-radius:50%; background:var(--p2-color);"></div>
+      <div style="width:12px; height:12px; border-radius:50%; background:var(--p3-color);"></div>
+      <div style="width:12px; height:12px; border-radius:50%; background:var(--p4-color);"></div>
+    </div>
+    <h1>Loop Booth</h1>
+    <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 20px;">Collaborate on dubs in real-time or practice solo.</p>
+    
+    <button class="btn btn-primary" id="singleplayerBtn" style="width: 100%; justify-content: center; margin-bottom: 20px;">Play Singleplayer</button>
+
+    <div style="display:flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+      <hr style="flex:1; border-color: var(--line-soft);">
+      <span style="font-size: 11px; color: var(--text-dim); font-weight: 600; letter-spacing: 1px;">OR MULTIPLAYER</span>
+      <hr style="flex:1; border-color: var(--line-soft);">
+    </div>
+    <p class="mp-hint">Multiplayer runs through the local sync server started with this project.</p>
+
+    <input type="text" id="playerNameInput" placeholder="Enter your name..." maxlength="20">
+    
+    <div class="setup-actions">
+      <button class="btn btn-primary" id="createRoomBtn">Create Room</button>
+      <div style="display:flex; gap: 5px; flex: 1;">
+        <input type="text" id="roomCodeInput" placeholder="Code" maxlength="5" style="width: 80px; text-transform: uppercase;">
+        <button class="btn" id="joinRoomBtn" style="flex:1;">Join</button>
+      </div>
+    </div>
+    <div id="setupLoader" style="display:none; margin-top: 15px; font-size:13px; color: var(--accent);">Connecting to server...</div>
+  </div>
+</div>
+
+<div id="lobbyScreen" class="screen">
+  <div style="position: absolute; top: 20px; left: 20px;">
+    <button class="btn btn-ghost" id="lobbyBackBtn" style="font-size: 13px;">â† Back to Menu</button>
+  </div>
+  <div class="lobby-card">
+    <h2>Lobby Code</h2>
+    <div class="room-code" id="lobbyRoomCode">-----</div>
+    
+    <div class="player-list" id="lobbyPlayerList">
+      <!-- Players injected here -->
+    </div>
+
+    <div id="lobbyHostUI" style="display:none; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px;">
+      <p style="font-size:14px; color: var(--text-dim);">You are the host. Select the video clip to dub.</p>
+      <div class="dropzone" id="hostDropzone">Click or drop a video file here</div>
+      <input type="file" id="hostFileInput" accept="video/*" class="sr-only">
+      <button class="btn btn-primary" id="startStudioBtn" disabled="" style="width: 100%; margin-top: 15px; justify-content: center;">Start Studio</button>
+    </div>
+
+    <div id="lobbyGuestUI" style="display:none; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px;">
+      <p id="guestWaitText" style="font-size:14px; color: var(--accent);">Waiting for host to select a video...</p>
+      <div id="guestMatchUI" style="display:none;">
+        <p style="font-size:14px; margin-bottom:10px;">The host selected <strong id="reqFileName"></strong>. Please select the exact same file from your computer to sync.</p>
+        <button class="btn" id="guestSelectFileBtn">Select Sync File</button>
+        <input type="file" id="guestFileInput" accept="video/*" class="sr-only">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="savedDubsScreen" class="screen" style="align-items: center; justify-content: center; padding: 20px;">
+  <div style="position: absolute; top: 20px; left: 20px;">
+    <button class="btn btn-ghost" id="savedDubsBackBtn" style="font-size: 13px;">â† Back to Menu</button>
+  </div>
+  <div class="setup-card" style="max-width: 500px; width: 100%;">
+    <h2 style="font-size: 20px; margin-bottom: 20px;">Saved Dubs</h2>
+    <div id="savedDubsList" style="text-align: center; background: var(--bg-well); border: 1px solid var(--line); border-radius: var(--radius-small); padding: 40px 20px; color: var(--text-faint); font-size: 14px;">
+      You haven't saved any final dubs yet.
+    </div>
+  </div>
+</div>
+
+<div id="studioScreen" class="screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="btn btn-ghost" id="studioBackBtn" style="padding: 6px 10px; font-size: 12px;">â† Menu</button>
+      <span class="room-badge" id="studioRoomBadge">Room: ---</span>
+      <span id="studioPlayerNames" style="font-size: 13px; color: var(--text-dim);"></span>
+    </div>
+    <div class="topbar-right">
+      <div class="mix-control" title="How loud the clip's original background (music/noise, voice removed) plays under your dub">
+        <label for="mixSlider">Background:</label>
+        <input type="range" id="mixSlider" min="0" max="100" value="65">
+      </div>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <div class="stage">
+      <div class="monitor">
+        <video id="mainVideo" playsinline=""></video>
+        <div class="monitor-badge" id="monitorBadge"><div class="rec-dot"></div><span id="monitorBadgeText">idle</span></div>
+      </div>
+
+      <div class="lane-panel">
+        <div class="lane-head">
+          <div class="lane-title">Line <span id="fragLabel">1</span> of <span id="fragTotal">1</span></div>
+        </div>
+        <canvas id="waveCanvas"></canvas>
+        
+        <div class="assign-panel" id="assignPanel">
+          <span class="assign-label">Assigned Players:</span>
+          <div class="assign-opts" id="assignOptsContainer">
+            <!-- Checkboxes injected here -->
+          </div>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button class="btn" id="listenBtn">â–· Listen Original</button>
+        <button class="btn btn-primary btn-rec" id="recordBtn" disabled="">â— Record Take</button>
+        <button class="btn" id="reviewBtn" disabled="">â–· Play Takes</button>
+        <button class="btn" id="pauseBtn" disabled="">â¸ Pause</button>
+        <div class="transport-spacer"></div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="btn btn-icon" id="prevFragBtn">â€¹</button>
+          <button class="btn btn-icon" id="nextFragBtn">â€º</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sidebar-head">
+        <h2>Lines</h2>
+        <div class="sidebar-actions">
+          <button class="btn btn-ghost undo-btn" id="undoBtn" disabled="" title="Undo last split or merge">â†º Undo</button>
+          <label class="edit-toggle" id="editToggle" title="Host only: click master timeline to split">
+            <input type="checkbox" id="editToggleInput"> edit splits (Host)
+          </label>
+        </div>
+      </div>
+      <div class="fragment-list" id="fragmentList"></div>
+    </div>
+  </div>
+
+  <div class="master-panel">
+    <div style="font-size:12px; color: var(--text-dim);">Master Timeline</div>
+    <canvas id="masterCanvas"></canvas>
+  </div>
+
+  <div class="render-bar">
+    <div style="flex:1;"></div>
+    <span id="renderStatus" style="font-size:13px; color: var(--text-dim);"></span>
+    <div class="render-progress" id="renderProgress"><div class="render-progress-fill" id="renderProgressFill"></div></div>
+    <a class="download-link" id="downloadLink" download="loop-booth-mp-dub.webm">â¬‡ Download Final</a>
+    <button class="btn btn-primary" id="renderBtn">Print Final Dub</button>
+  </div>
+</div>
+
+
+
+
+<script type="module" src="/src/app.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,14 @@
+{
+  "name": "loop-booth",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check src/network.js && node --check src/app.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
