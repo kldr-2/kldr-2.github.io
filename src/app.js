@@ -1,4 +1,4 @@
-﻿
+
 import { createMultiplayerClient } from './network.js';
 
 const appId = 'loop-booth-mp';
@@ -51,7 +51,8 @@ const state = {
   roomEventUnsub: null,
   videoSyncing: false,
   videoSyncedName: null,
-  syncProgress: 0
+  syncProgress: 0,
+  playerActivities: {} // uid -> { activity, fragId, fragIndex, playerName, updatedAt }
 };
 
 const el = (id) => document.getElementById(id);
@@ -109,6 +110,7 @@ function resetToMenu() {
   state.currentIndex = 0;
   state.editMode = false;
   state.undoStack = [];
+  state.playerActivities = {};
   el('undoBtn').disabled = true;
   
   el('setupLoader').style.display = 'none';
@@ -312,9 +314,15 @@ function listenToRoom(){
         enterStudio();
       }
       
-      // If in studio, sync fragments
+      // If in studio, sync fragments, line sync, and player list
       if(data.status === 'studio'){
+        renderStudioPlayerList();
         syncFragmentsFromDB(data.fragments);
+        if(!state.isHost && typeof data.activeLineIndex === 'number' && data.activeLineIndex !== state.currentIndex){
+          if(!state.pb || state.pb.mode !== 'record'){
+            selectFragment(data.activeLineIndex, false, true);
+          }
+        }
       }
     }, (err) => console.error("Room sync error", err));
   });
@@ -410,19 +418,42 @@ async function enterStudio(){
   switchScreen('studioScreen');
   el('studioRoomBadge').textContent = state.isSingleplayer ? 'Mode: Solo' : `Room: ${state.roomId}`;
   
-  let pNames = state.roomData.players.map(p => `<span style="color:${p.color}">${p.name}</span>`).join(' & ');
-  el('studioPlayerNames').innerHTML = pNames;
+  renderStudioPlayerList();
   
   el('editToggleInput').disabled = !state.isHost;
   el('undoBtn').style.display = state.isHost ? 'inline-flex' : 'none';
   el('assignPanel').style.display = state.isSingleplayer ? 'none' : 'flex';
   
-  state.videoURL = URL.createObjectURL(state.file);
+  // If guest enters studio and video file is not yet ready, fetch it now
+  if(!state.file && state.roomId && !state.isSingleplayer){
+    el('monitorLoading').style.display = 'flex';
+    el('monitorLoadingText').textContent = 'Downloading video from host...';
+    try {
+      state.file = await multiplayer.api.downloadVideo(state.roomId, (progress) => {
+        el('monitorLoadingText').textContent = `Downloading video from host... ${progress}%`;
+      });
+      state.videoSyncedName = state.roomData?.videoName || 'clip.mp4';
+      state.me.ready = true;
+    } catch(err) {
+      console.error('Failed to download video in enterStudio:', err);
+      showNotice('Could not load video from host. Please check connection.');
+    } finally {
+      el('monitorLoading').style.display = 'none';
+    }
+  }
+
   const video = el('mainVideo');
-  video.src = state.videoURL;
-  
-  await new Promise(r => video.onloadedmetadata = () => r());
-  state.duration = video.duration || (await forceDuration());
+  if(state.file){
+    if(state.videoURL) URL.revokeObjectURL(state.videoURL);
+    state.videoURL = URL.createObjectURL(state.file);
+    video.src = state.videoURL;
+    video.load();
+    await new Promise(r => {
+      video.onloadedmetadata = () => r();
+      setTimeout(r, 1500);
+    });
+    state.duration = video.duration || (await forceDuration());
+  }
   
   // Pre-request microphone access so it doesn't interrupt the user's first take
   try {
@@ -433,18 +464,20 @@ async function enterStudio(){
     console.warn("Mic access not granted at startup. Will prompt again on record.");
   }
 
-  try {
-    const ctx = ensureCtx();
-    if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
-    const arr = await state.file.arrayBuffer();
-    state.masterBuffer = await ctx.decodeAudioData(arr.slice(0));
-    state.envelope = buildEnvelope(state.masterBuffer, 50); // High res envelope
-    state.backgroundBuffer = buildVocalReducedBuffer(state.masterBuffer);
-    if(!state.backgroundBuffer){
-      showNotice("This clip's audio is mono, so the original voice can't be separated from the background. The full original audio will play under any un-dubbed lines instead.");
+  if(state.file){
+    try {
+      const ctx = ensureCtx();
+      if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
+      const arr = await state.file.arrayBuffer();
+      state.masterBuffer = await ctx.decodeAudioData(arr.slice(0));
+      state.envelope = buildEnvelope(state.masterBuffer, 50); // High res envelope
+      state.backgroundBuffer = buildVocalReducedBuffer(state.masterBuffer);
+      if(!state.backgroundBuffer){
+        showNotice("This clip's audio is mono, so the original voice can't be separated from the background. The full original audio will play under any un-dubbed lines instead.");
+      }
+    } catch(e) {
+      showNotice("Failed to extract original audio. Waveforms won't display.");
     }
-  } catch(e) {
-    showNotice("Failed to extract original audio. Waveforms won't display.");
   }
 
   if(state.isHost && state.roomData.fragments.length === 0){
@@ -459,9 +492,11 @@ async function enterStudio(){
       const fb = await loadFirebase();
       if(fb){
         const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-        await fb.updateDoc(roomRef, { fragments: initialFrags });
+        await fb.updateDoc(roomRef, { fragments: initialFrags, activeLineIndex: 0 });
       }
     }
+  } else if(!state.isHost && typeof state.roomData?.activeLineIndex === 'number'){
+    state.currentIndex = Math.min(state.roomData.activeLineIndex, Math.max(0, state.fragments.length - 1));
   }
 
   if (!state.isSingleplayer) {
@@ -470,6 +505,7 @@ async function enterStudio(){
   requestAnimationFrame(() => {
     renderMasterCanvas();
     if(state.fragments[state.currentIndex]) drawWave(state.fragments[state.currentIndex]);
+    checkRecordAbility();
   });
 }
 
@@ -674,12 +710,86 @@ function renderAssignmentUI(frag){
   });
 }
 
+function renderStudioPlayerList(){
+  const container = el('studioPlayerList');
+  if(!container) return;
+  const players = state.roomData?.players || (state.me ? [state.me] : []);
+  const hostId = state.roomData?.hostId;
+
+  container.innerHTML = players.map(p => {
+    const act = state.playerActivities[p.id] || { activity: 'idle' };
+    const isMe = p.id === state.uid;
+    const isHost = p.id === hostId;
+
+    let badgeClass = '';
+    let badgeContent = '';
+
+    if(act.activity === 'recording'){
+      badgeClass = 'is-recording';
+      const lineText = typeof act.fragIndex === 'number' ? `Line ${act.fragIndex + 1}` : 'Take';
+      badgeContent = `<span class="rec-dot-pulse"></span> REC (${lineText})`;
+    } else if(act.activity === 'reviewing'){
+      badgeClass = 'is-playing';
+      badgeContent = `▶ Playing`;
+    } else if(act.activity === 'listening'){
+      badgeClass = 'is-listening';
+      badgeContent = `🎧 Listening`;
+    } else if(act.activity === 'paused'){
+      badgeClass = 'is-paused';
+      badgeContent = `⏸ Paused`;
+    } else {
+      badgeClass = 'is-idle';
+      badgeContent = `Idle`;
+    }
+
+    const hostTag = isHost ? '<span class="role-tag">Host</span>' : '';
+    const youTag = isMe ? '<span class="you-tag">(You)</span>' : '';
+
+    return `
+      <div class="studio-player-badge ${badgeClass}" title="${p.name}: ${act.activity}">
+        <div class="p-dot" style="background:${p.color}"></div>
+        <span class="p-name">${p.name}${youTag}${hostTag}</span>
+        <span class="p-state">${badgeContent}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function broadcastMyActivity(activity, fragId = null, fragIndex = state.currentIndex){
+  state.playerActivities[state.uid] = {
+    activity,
+    fragId,
+    fragIndex,
+    playerName: state.me?.name || 'Player',
+    updatedAt: Date.now()
+  };
+  renderStudioPlayerList();
+
+  if(!state.isSingleplayer && state.roomId){
+    sendPlaybackEvent({
+      action: 'player-activity',
+      activity,
+      fragId,
+      fragIndex,
+      uid: state.uid,
+      playerName: state.me?.name || 'Player'
+    });
+  }
+}
+
 function checkRecordAbility(){
   const f = state.fragments[state.currentIndex];
   if(!f) return;
   const iAmAssigned = state.isSingleplayer || f.assigned.includes(state.uid);
-  el('recordBtn').disabled = !iAmAssigned;
-  
+  const canAssignMe = f.assigned.length < 2;
+  const canRecord = iAmAssigned || canAssignMe;
+  el('recordBtn').disabled = !canRecord;
+  el('recordBtn').title = iAmAssigned
+    ? "Record your take for this line"
+    : canAssignMe
+      ? "Record line (will assign you to this line)"
+      : "Line already has 2 assigned players";
+
   const takeCount = f.assigned.filter(id => state.takes[f.id] && state.takes[f.id][id]).length;
   el('reviewBtn').disabled = takeCount === 0;
 }
@@ -692,7 +802,9 @@ function selectFragment(idx, skipRedraw = false, isRemote = false){
   
   el('fragLabel').textContent = idx + 1;
   el('fragTotal').textContent = state.fragments.length;
-  el('mainVideo').currentTime = f.start;
+  if(state.file && el('mainVideo').src && state.duration){
+    el('mainVideo').currentTime = f.start;
+  }
   
   renderAssignmentUI(f);
   checkRecordAbility();
@@ -702,6 +814,16 @@ function selectFragment(idx, skipRedraw = false, isRemote = false){
     renderMasterCanvas();
   }
   drawWave(f);
+
+  // Broadcast host line selection so guests follow in lockstep
+  if(state.isHost && !isRemote && !state.isSingleplayer && state.roomId){
+    sendPlaybackEvent({ action: 'select-line', index: idx, fragmentId: f.id });
+    loadFirebase().then(fb => {
+      if(!fb) return;
+      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+      fb.updateDoc(roomRef, { activeLineIndex: idx, activeFragmentId: f.id }).catch(() => {});
+    });
+  }
 }
 
 el('prevFragBtn').onclick = () => selectFragment(Math.max(0, state.currentIndex - 1));
@@ -931,11 +1053,22 @@ function renderFragmentList(){
       });
     }
 
+    let liveRecHTML = '';
+    const activeRecorder = Object.entries(state.playerActivities).find(
+      ([uid, act]) => act.activity === 'recording' && (act.fragId === f.id || act.fragIndex === i)
+    );
+    if(activeRecorder){
+      const recPlayer = state.roomData?.players?.find(x => x.id === activeRecorder[0]);
+      const recName = recPlayer ? recPlayer.name : activeRecorder[1].playerName || 'Player';
+      liveRecHTML = `<div class="frag-live-recording"><span class="dot"></span>${recName} recording</div>`;
+    }
+
     row.innerHTML = `
       <span class="frag-num">${String(i+1).padStart(2,'0')}</span>
       <div class="frag-info">
         <span class="frag-time">${f.start.toFixed(1)}s - ${f.end.toFixed(1)}s</span>
         <div class="frag-assignees">${assignHTML}</div>
+        ${liveRecHTML}
       </div>
     `;
     row.onclick = () => selectFragment(i);
@@ -970,14 +1103,55 @@ function sendPlaybackEvent(event){
 
 function handleRoomEvent(event){
   if(!event || event.originUid === state.uid) return;
+
+  if(event.action === 'player-activity'){
+    state.playerActivities[event.uid] = {
+      activity: event.activity,
+      fragId: event.fragId,
+      fragIndex: event.fragIndex,
+      playerName: event.playerName,
+      updatedAt: Date.now()
+    };
+    renderStudioPlayerList();
+    renderFragmentList();
+    return;
+  }
+
+  if(event.action === 'select-line'){
+    const index = typeof event.index === 'number' ? event.index : state.fragments.findIndex(f => f.id === event.fragmentId);
+    if(index >= 0 && index !== state.currentIndex){
+      if(!state.pb || state.pb.mode !== 'record'){
+        selectFragment(index, false, true);
+      }
+    }
+    return;
+  }
+
   if(event.action === 'start'){
     const index = state.fragments.findIndex(fragment => fragment.id === event.fragmentId);
     if(index < 0) return;
     selectFragment(index, true, true);
     const remoteMode = 'original';
-    playFragment(remoteMode, true, event.mode === 'record' ? `${event.playerName || 'Player'} recording` : 'Synced playback', event.position || 0, event.sentAt);
+    const label = event.mode === 'record'
+      ? `${event.playerName || 'Player'} recording`
+      : event.mode === 'review'
+        ? `${event.playerName || 'Player'} playing takes`
+        : 'Synced playback';
+
+    state.playerActivities[event.originUid] = {
+      activity: event.mode === 'record' ? 'recording' : event.mode === 'review' ? 'reviewing' : 'listening',
+      fragId: event.fragmentId,
+      fragIndex: index,
+      playerName: event.playerName,
+      updatedAt: Date.now()
+    };
+    renderStudioPlayerList();
+    renderFragmentList();
+
+    playFragment(remoteMode, true, label, event.position || 0, event.sentAt);
     return;
   }
+
   if(event.action === 'sync'){
     const pb = state.pb;
     if(!pb || pb.frag.id !== event.fragmentId || !state.isPlaying) return;
@@ -987,15 +1161,33 @@ function handleRoomEvent(event){
     else el('mainVideo').playbackRate = Math.max(0.96, Math.min(1.04, 1 + drift * 0.08));
     return;
   }
+
   if(event.action === 'pause'){
+    if(event.originUid && state.playerActivities[event.originUid]){
+      state.playerActivities[event.originUid].activity = 'paused';
+      renderStudioPlayerList();
+    }
     pausePlayback(true);
     return;
   }
+
   if(event.action === 'resume'){
+    if(event.originUid && state.playerActivities[event.originUid]){
+      state.playerActivities[event.originUid].activity = 'reviewing';
+      renderStudioPlayerList();
+    }
     resumePlayback(true);
     return;
   }
-  if(event.action === 'stop') finishPlayback(true);
+
+  if(event.action === 'stop'){
+    if(event.originUid && state.playerActivities[event.originUid]){
+      state.playerActivities[event.originUid].activity = 'idle';
+      renderStudioPlayerList();
+      renderFragmentList();
+    }
+    finishPlayback(true);
+  }
 }
 
 function startReviewSources(pb, offsetSeconds){
@@ -1066,12 +1258,16 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
     state.liveTrace = new Array(waveWidth).fill(0);
     state.pb.recorder.start();
     el('monitorBadgeText').textContent = "Recording"; el('monitorBadge').classList.add('live');
+    el('recordBtn').classList.add('is-armed');
+    if(!isRemote) broadcastMyActivity('recording', f.id, state.currentIndex);
   } else if (mode === 'review'){
     startReviewSources(state.pb, 0);
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
+    if(!isRemote) broadcastMyActivity('reviewing', f.id, state.currentIndex);
   } else {
     v.volume = isRemote ? 0 : 1.0;
     el('monitorBadgeText').textContent = remoteLabel || "Original"; el('monitorBadge').classList.toggle('live', Boolean(remoteLabel));
+    if(!isRemote) broadcastMyActivity('listening', f.id, state.currentIndex);
   }
 
   if(!isRemote){
@@ -1087,7 +1283,13 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
   setPauseButton('playing');
   const playPromise = v.play();
   playPromise?.catch(error => {
-    if(!isRemote) console.warn('Playback could not start:', error);
+    // If audio autoplay was blocked on Safari/MacBook, mute video track and retry
+    if (!v.muted) {
+      v.muted = true;
+      v.play().catch(e => console.warn('Muted playback also blocked:', e));
+    } else {
+      console.warn('Playback could not start:', error);
+    }
   });
   runLoop();
 }
@@ -1140,7 +1342,10 @@ function pausePlayback(isRemote = false){
   }
   el('monitorBadgeText').textContent = "Paused"; el('monitorBadge').classList.remove('live');
   setPauseButton('paused');
-  if(!isRemote) sendPlaybackEvent({ action:'pause', fragmentId:pb.frag.id, position:Math.max(0, v.currentTime - pb.frag.start) });
+  if(!isRemote){
+    broadcastMyActivity('paused', pb?.frag?.id, state.currentIndex);
+    sendPlaybackEvent({ action:'pause', fragmentId:pb.frag.id, position:Math.max(0, v.currentTime - pb.frag.start) });
+  }
 }
 
 function resumePlayback(isRemote = false){
@@ -1151,11 +1356,14 @@ function resumePlayback(isRemote = false){
   if(pb.mode === 'record' && pb.recorder && pb.recorder.state === 'paused'){
     try{ pb.recorder.resume(); }catch(e){}
     el('monitorBadgeText').textContent = "Recording"; el('monitorBadge').classList.add('live');
+    if(!isRemote) broadcastMyActivity('recording', pb?.frag?.id, state.currentIndex);
   } else if(pb.mode === 'review'){
     startReviewSources(pb, pb.sourcesOffsetAtStart || 0);
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
+    if(!isRemote) broadcastMyActivity('reviewing', pb?.frag?.id, state.currentIndex);
   } else {
     el('monitorBadgeText').textContent = "Original"; el('monitorBadge').classList.remove('live');
+    if(!isRemote) broadcastMyActivity('listening', pb?.frag?.id, state.currentIndex);
   }
   v.playbackRate = 1;
   v.play();
@@ -1175,7 +1383,9 @@ function finishPlayback(isRemote = false){
   const v = el('mainVideo');
   v.pause();
   el('monitorBadgeText').textContent = "Idle"; el('monitorBadge').classList.remove('live');
+  el('recordBtn').classList.remove('is-armed');
   setPauseButton('idle');
+  if(!isRemote) broadcastMyActivity('idle');
   
   const pb = state.pb;
   if(pb){
@@ -1250,12 +1460,35 @@ function stopPlayback(isRemote = false){
   }
   state.pb = null;
   el('monitorBadgeText').textContent = "Idle"; el('monitorBadge').classList.remove('live');
+  el('recordBtn').classList.remove('is-armed');
   setPauseButton('idle');
-  if(!isRemote) sendPlaybackEvent({ action:'stop' });
+  if(!isRemote){
+    broadcastMyActivity('idle');
+    sendPlaybackEvent({ action:'stop' });
+  }
 }
 
 el('listenBtn').onclick = () => playFragment('original');
-el('recordBtn').onclick = () => playFragment('record');
+el('recordBtn').onclick = async () => {
+  const f = state.fragments[state.currentIndex];
+  if(!f) return;
+  if(!state.isSingleplayer && !f.assigned.includes(state.uid)){
+    if(f.assigned.length < 2){
+      f.assigned.push(state.uid);
+      renderAssignmentUI(f);
+      renderFragmentList();
+      checkRecordAbility();
+      const fb = await loadFirebase();
+      if(fb){
+        const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+        fb.updateDoc(roomRef, { fragments: state.fragments }).catch(() => {});
+      }
+    } else {
+      return showNotice("Max 2 players per line. Uncheck another player to assign yourself.");
+    }
+  }
+  playFragment('record');
+};
 el('reviewBtn').onclick = () => playFragment('review');
 
 el('renderBtn').onclick = async () => {

@@ -92,9 +92,12 @@ const httpServer = createServer(async (request, response) => {
       }
       chunks.push(chunk);
     }
+    const rawFileName = request.headers['x-file-name'] || '';
+    const name = rawFileName ? decodeURIComponent(rawFileName) : 'video.mp4';
     roomVideos.set(roomId, {
       body: Buffer.concat(chunks),
-      type: request.headers['content-type'] || 'application/octet-stream'
+      type: request.headers['content-type'] || 'video/mp4',
+      name
     });
     response.writeHead(204);
     response.end();
@@ -108,9 +111,30 @@ const httpServer = createServer(async (request, response) => {
       response.end('Room video not found');
       return;
     }
+    const total = video.body.length;
+    const range = request.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+      const chunkSize = (end - start) + 1;
+      response.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${total}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': video.type,
+        'Content-Disposition': `inline; filename="${encodeURIComponent(video.name || 'video.mp4')}"`,
+        'Cache-Control': 'no-store'
+      });
+      response.end(video.body.subarray(start, end + 1));
+      return;
+    }
+
     response.writeHead(200, {
       'Content-Type': video.type,
-      'Content-Length': video.body.length,
+      'Content-Length': total,
+      'Accept-Ranges': 'bytes',
+      'Content-Disposition': `inline; filename="${encodeURIComponent(video.name || 'video.mp4')}"`,
       'Cache-Control': 'no-store'
     });
     response.end(video.body);
@@ -137,7 +161,9 @@ wss.on('connection', socket => {
   subscriptions.set(socket, new Set());
   socket.on('message', raw => {
     try {
-      const { requestId, op, path, data } = JSON.parse(raw);
+      const msg = JSON.parse(raw);
+      const { requestId, op, path, data, roomId, event, player } = msg;
+
       if (op === 'get') return send(socket, { requestId, data: dataFor(path) });
       if (op === 'set') {
         const value = updatePath(path, data);
@@ -154,6 +180,38 @@ wss.on('connection', socket => {
       if (op === 'unsubscribe') {
         subscriptions.get(socket).delete(path);
         return send(socket, { requestId, data: true });
+      }
+      if (op === 'room-event') {
+        for (const [s, paths] of subscriptions) {
+          if (s !== socket) {
+            let matches = false;
+            for (const p of paths) {
+              if (p.includes(roomId)) {
+                matches = true;
+                break;
+              }
+            }
+            if (matches) send(s, { type: 'room-event', roomId, event });
+          }
+        }
+        return send(socket, { requestId, success: true });
+      }
+      if (op === 'player-presence') {
+        const current = rooms.get(roomId) || { id: roomId, players: [] };
+        const existingIndex = (current.players || []).findIndex(p => p.id === player.id);
+        const updatedPlayers = [...(current.players || [])];
+        if (existingIndex >= 0) {
+          updatedPlayers[existingIndex] = { ...updatedPlayers[existingIndex], ...player };
+        } else {
+          updatedPlayers.push(player);
+        }
+        const next = { ...current, players: updatedPlayers };
+        rooms.set(roomId, next);
+        broadcast(`artifacts/loop-booth-mp/public/data/rooms/${roomId}`, next);
+        return send(socket, { requestId, success: true });
+      }
+      if (op === 'ping') {
+        return send(socket, { type: 'pong' });
       }
       send(socket, { requestId, error: 'Unknown operation' });
     } catch (error) {
