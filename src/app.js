@@ -435,8 +435,9 @@ async function enterStudio(){
 
   try {
     const ctx = ensureCtx();
+    if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
     const arr = await state.file.arrayBuffer();
-    state.masterBuffer = await ctx.decodeAudioData(arr);
+    state.masterBuffer = await ctx.decodeAudioData(arr.slice(0));
     state.envelope = buildEnvelope(state.masterBuffer, 50); // High res envelope
     state.backgroundBuffer = buildVocalReducedBuffer(state.masterBuffer);
     if(!state.backgroundBuffer){
@@ -466,6 +467,10 @@ async function enterStudio(){
   if (!state.isSingleplayer) {
     listenToTakes();
   }
+  requestAnimationFrame(() => {
+    renderMasterCanvas();
+    if(state.fragments[state.currentIndex]) drawWave(state.fragments[state.currentIndex]);
+  });
 }
 
 function forceDuration(){
@@ -672,7 +677,7 @@ function renderAssignmentUI(frag){
 function checkRecordAbility(){
   const f = state.fragments[state.currentIndex];
   if(!f) return;
-  const iAmAssigned = f.assigned.includes(state.uid);
+  const iAmAssigned = state.isSingleplayer || f.assigned.includes(state.uid);
   el('recordBtn').disabled = !iAmAssigned;
   
   const takeCount = f.assigned.filter(id => state.takes[f.id] && state.takes[f.id][id]).length;
@@ -958,7 +963,7 @@ function setPauseButton(mode){
 
 function sendPlaybackEvent(event){
   if(state.isSingleplayer || !state.roomId) return;
-  multiplayer.api.sendRoomEvent(state.roomId, { ...event, originUid: state.uid, playerName: state.me?.name }).catch(error => {
+  multiplayer.api.sendRoomEvent(state.roomId, { ...event, sentAt: event.sentAt || Date.now(), originUid: state.uid, playerName: state.me?.name }).catch(error => {
     console.error('Playback sync error:', error);
   });
 }
@@ -970,7 +975,16 @@ function handleRoomEvent(event){
     if(index < 0) return;
     selectFragment(index, true, true);
     const remoteMode = 'original';
-    playFragment(remoteMode, true, event.mode === 'record' ? `${event.playerName || 'Player'} recording` : 'Synced playback');
+    playFragment(remoteMode, true, event.mode === 'record' ? `${event.playerName || 'Player'} recording` : 'Synced playback', event.position || 0, event.sentAt);
+    return;
+  }
+  if(event.action === 'sync'){
+    const pb = state.pb;
+    if(!pb || pb.frag.id !== event.fragmentId || !state.isPlaying) return;
+    const target = pb.frag.start + (event.position || 0) + Math.max(0, (Date.now() - (event.sentAt || Date.now())) / 1000);
+    const drift = target - el('mainVideo').currentTime;
+    if(Math.abs(drift) > 0.35) el('mainVideo').currentTime = target;
+    else el('mainVideo').playbackRate = Math.max(0.96, Math.min(1.04, 1 + drift * 0.08));
     return;
   }
   if(event.action === 'pause'){
@@ -1002,7 +1016,7 @@ function startReviewSources(pb, offsetSeconds){
   pb.sourcesOffsetAtStart = offsetSeconds;
 }
 
-async function playFragment(mode, isRemote = false, remoteLabel = ''){
+async function playFragment(mode, isRemote = false, remoteLabel = '', startPosition = 0, sentAt = Date.now()){
   stopPlayback(isRemote);
   const f = state.fragments[state.currentIndex];
   if(!f) return;
@@ -1019,7 +1033,9 @@ async function playFragment(mode, isRemote = false, remoteLabel = ''){
   }
 
   const mixVol = parseInt(el('mixSlider').value, 10) / 100;
-  v.muted = false; v.volume = mode === 'record' ? 0 : mixVol;
+  v.muted = isRemote || mode === 'record';
+  v.volume = isRemote || mode === 'record' ? 0 : mixVol;
+  v.playbackRate = 1;
   v.currentTime = f.start;
   
   // Wait for seek
@@ -1027,6 +1043,9 @@ async function playFragment(mode, isRemote = false, remoteLabel = ''){
     if(Math.abs(v.currentTime - f.start) < 0.05) r();
     else { v.onseeked = () => { v.onseeked=null; r(); }; setTimeout(r, 300); }
   });
+  if(isRemote && startPosition > 0){
+    v.currentTime = Math.min(f.end - 0.01, f.start + startPosition + Math.max(0, (Date.now() - sentAt) / 1000));
+  }
 
   state.pb = { mode, frag: f, sources: [], recorder: null, chunks: [], analyser: null, sourcesOffsetAtStart: 0, remote: isRemote };
   
@@ -1041,7 +1060,8 @@ async function playFragment(mode, isRemote = false, remoteLabel = ''){
     });
     state.pb.recorder = new MediaRecorder(state.micStream, mimeOpts ? {mimeType: mimeOpts} : undefined);
     
-    state.pb.recorder.ondataavailable = e => { if(e.data.size) state.pb.chunks.push(e.data); };
+    const recording = state.pb;
+    state.pb.recorder.ondataavailable = e => { if(e.data.size) recording.chunks.push(e.data); };
     const waveWidth = Math.round(el('waveCanvas').getBoundingClientRect().width) || 300;
     state.liveTrace = new Array(waveWidth).fill(0);
     state.pb.recorder.start();
@@ -1050,14 +1070,25 @@ async function playFragment(mode, isRemote = false, remoteLabel = ''){
     startReviewSources(state.pb, 0);
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
   } else {
-    v.volume = 1.0;
+    v.volume = isRemote ? 0 : 1.0;
     el('monitorBadgeText').textContent = remoteLabel || "Original"; el('monitorBadge').classList.toggle('live', Boolean(remoteLabel));
   }
 
-  if(!isRemote) sendPlaybackEvent({ action:'start', mode, fragmentId:f.id });
+  if(!isRemote){
+    sendPlaybackEvent({ action:'start', mode, fragmentId:f.id, position:0 });
+    const playback = state.pb;
+    playback.syncTimer = setInterval(() => {
+      if(state.pb === playback && state.isPlaying){
+        sendPlaybackEvent({ action:'sync', fragmentId:f.id, position:Math.max(0, v.currentTime - f.start) });
+      }
+    }, 500);
+  }
   state.isPlaying = true; state.paused = false;
   setPauseButton('playing');
-  v.play();
+  const playPromise = v.play();
+  playPromise?.catch(error => {
+    if(!isRemote) console.warn('Playback could not start:', error);
+  });
   runLoop();
 }
 
@@ -1109,7 +1140,7 @@ function pausePlayback(isRemote = false){
   }
   el('monitorBadgeText').textContent = "Paused"; el('monitorBadge').classList.remove('live');
   setPauseButton('paused');
-  if(!isRemote) sendPlaybackEvent({ action:'pause' });
+  if(!isRemote) sendPlaybackEvent({ action:'pause', fragmentId:pb.frag.id, position:Math.max(0, v.currentTime - pb.frag.start) });
 }
 
 function resumePlayback(isRemote = false){
@@ -1126,10 +1157,11 @@ function resumePlayback(isRemote = false){
   } else {
     el('monitorBadgeText').textContent = "Original"; el('monitorBadge').classList.remove('live');
   }
+  v.playbackRate = 1;
   v.play();
   setPauseButton('playing');
   runLoop();
-  if(!isRemote) sendPlaybackEvent({ action:'resume' });
+  if(!isRemote) sendPlaybackEvent({ action:'resume', fragmentId:pb.frag.id, position:Math.max(0, v.currentTime - pb.frag.start) });
 }
 
 el('pauseBtn').onclick = () => {
@@ -1147,6 +1179,7 @@ function finishPlayback(isRemote = false){
   
   const pb = state.pb;
   if(pb){
+    if(pb.syncTimer) clearInterval(pb.syncTimer);
     pb.sources && pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
     if(pb.mode === 'record' && pb.recorder){
       const fragId = pb.frag.id;
@@ -1209,6 +1242,7 @@ function stopPlayback(isRemote = false){
   v.pause();
   const pb = state.pb;
   if(pb){
+    if(pb.syncTimer) clearInterval(pb.syncTimer);
     pb.sources && pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
     if(pb.recorder && pb.recorder.state !== 'inactive'){
       try{ pb.recorder.stop(); }catch(e){}
