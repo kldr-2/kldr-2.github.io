@@ -316,8 +316,16 @@ async function syncHostVideo(roomData){
   if(state.videoSyncing || state.videoSyncedName === roomData.videoName) return;
   state.videoSyncing = true;
   el('reqFileName').textContent = `${roomData.videoName} (downloading...)`;
+  el('syncProgressFill').style.width = '0%';
+  el('syncProgressText').textContent = '0%';
   try {
-    state.file = await multiplayer.api.downloadVideo(state.roomId);
+    state.file = await multiplayer.api.downloadVideo(state.roomId, progress => {
+      el('syncProgressFill').style.width = `${progress}%`;
+      el('syncProgressText').textContent = `${progress}%`;
+      el('guestMatchUI').querySelector('.sync-progress').setAttribute('aria-valuenow', progress);
+    });
+    el('syncProgressFill').style.width = '100%';
+    el('syncProgressText').textContent = '100% - ready';
     state.videoSyncedName = roomData.videoName;
     state.me.ready = true;
     const fb = await loadFirebase();

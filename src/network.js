@@ -175,14 +175,17 @@ export function createMultiplayerClient() {
       return;
     }
     if(message.type === 'video-meta'){
-      videoDownloads.set(message.requestId, { ...message, chunks: [] });
+      const pendingDownload = videoDownloads.get(message.requestId);
+      videoDownloads.set(message.requestId, { ...message, chunks: [], received: 0, onProgress: pendingDownload?.onProgress });
       return;
     }
     if(message.type === 'video-chunk'){
       const download = videoDownloads.get(message.requestId);
       if(!download) return;
       download.chunks[message.index] = message.data;
-      if(download.chunks.filter(Boolean).length === download.total){
+      download.received += 1;
+      download.onProgress?.(Math.round((download.received / download.total) * 100));
+      if(download.received === download.total){
         videoDownloads.delete(message.requestId);
         const blob = new Blob(download.chunks, { type: download.type });
         const request = pending.get(message.requestId);
@@ -263,11 +266,12 @@ export function createMultiplayerClient() {
       await ensureHost(roomId);
       videoStore.set(roomId, { name: file.name, type: file.type || 'video/mp4', body: await file.arrayBuffer() });
     },
-    async downloadVideo(roomId) {
+    async downloadVideo(roomId, onProgress) {
       const connection = await ensureGuest(roomId);
       const requestId = makeId();
       return new Promise((resolve, reject) => {
         pending.set(requestId, { resolve, reject });
+        videoDownloads.set(requestId, { onProgress });
         send(connection, { type: 'video-request', requestId, roomId });
       });
     },

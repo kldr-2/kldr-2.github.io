@@ -83,6 +83,10 @@
       <p id="guestWaitText" style="font-size:14px; color: var(--accent);">Waiting for host to select a video...</p>
       <div id="guestMatchUI" style="display:none;">
         <p style="font-size:14px; color:var(--text-dim);">Syncing <strong id="reqFileName"></strong> from the host. You can join as soon as it is ready.</p>
+        <div class="sync-progress" role="progressbar" aria-label="Video sync progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="sync-progress-fill" id="syncProgressFill"></div>
+        </div>
+        <div class="sync-progress-text" id="syncProgressText">0%</div>
       </div>
     </div>
   </div>

@@ -89,6 +89,9 @@
     margin-top:20px; padding: 24px 20px; border: 1.5px dashed var(--line); border-radius: 10px; background: var(--bg-well); cursor:pointer;
   }
   .dropzone:hover{ border-color: var(--accent-dim); }
+  .sync-progress{ height:8px; margin-top:14px; overflow:hidden; background:var(--bg-well); border:1px solid var(--line); border-radius:999px; }
+  .sync-progress-fill{ width:0; height:100%; background:var(--accent); transition:width .12s linear; }
+  .sync-progress-text{ margin-top:6px; color:var(--accent); font-family:var(--font-mono); font-size:11px; text-align:right; }
 
   /* Studio */
   #studioScreen{ height:100dvh; min-height:0; overflow:hidden; }
