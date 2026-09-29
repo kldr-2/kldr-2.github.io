@@ -247,7 +247,7 @@ el('joinRoomBtn').onclick = async () => {
     el('lobbyGuestUI').style.display = 'block';
     listenToRoom();
     switchScreen('lobbyScreen');
-    fb.updateDoc(roomRef, { players: state.roomData.players }).catch(error => {
+    multiplayer.api.announcePlayer(state.roomId, state.me).catch(error => {
       console.error('Join room sync error:', error);
       showNotice('Connected to the room, but the player list is still syncing.');
     });
@@ -324,7 +324,8 @@ async function syncHostVideo(roomData){
     if(!fb) return;
     const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
     const updatedPlayers = state.roomData.players.map(p => p.id === state.uid ? {...p, ready: true} : p);
-    await fb.updateDoc(roomRef, { players: updatedPlayers });
+    state.roomData = { ...state.roomData, players: updatedPlayers };
+    await multiplayer.api.announcePlayer(state.roomId, state.me = { ...state.me, ready: true });
   } catch(error) {
     console.error('Host video sync error:', error);
     showNotice('Could not download the host video. Retrying shortly.');

@@ -74,7 +74,7 @@ export function createMultiplayerClient() {
       guestPeer.on('open', () => {
         const connection = guestPeer.connect(`loop-booth-${roomId}`, { reliable: true });
         connection.on('open', () => {
-          connections.set(roomId, { peer: guestPeer, connection });
+          connections.set(roomId, connection);
           resolve(connection);
         });
         connection.on('error', reject);
@@ -105,11 +105,22 @@ export function createMultiplayerClient() {
   function broadcast(path, data){
     notify(path, data);
     hostConnections.forEach(connection => {
-      if(connection.subscriptions?.has(path)) send(connection, { type: 'snapshot', path, data });
+      const isRoomSnapshot = path.includes('/rooms/');
+      if(isRoomSnapshot || connection.subscriptions?.has(path)) send(connection, { type: 'snapshot', path, data });
     });
   }
 
   async function handleHostMessage(connection, message){
+    if(message.type === 'player-presence'){
+      const room = hostRoomData.get(message.roomId);
+      if(!room) return;
+      const players = room.players.filter(player => player.id !== message.player.id);
+      players.push(message.player);
+      const next = { ...room, players };
+      hostRoomData.set(message.roomId, next);
+      broadcast(roomPath(message.roomId), next);
+      return;
+    }
     if(message.type === 'video-request'){
       const video = videoStore.get(message.roomId);
       if(!video) return send(connection, { type: 'video-error', requestId: message.requestId });
@@ -215,6 +226,10 @@ export function createMultiplayerClient() {
     }
     const connection = await ensureGuest(roomId);
     const requestId = makeId();
+    if(op === 'update'){
+      send(connection, { type: 'request', requestId, op, path, data });
+      return data;
+    }
     return new Promise((resolve, reject) => {
       pending.set(requestId, { resolve, reject });
       send(connection, { type: 'request', requestId, op, path, data });
@@ -255,6 +270,10 @@ export function createMultiplayerClient() {
         pending.set(requestId, { resolve, reject });
         send(connection, { type: 'video-request', requestId, roomId });
       });
+    },
+    async announcePlayer(roomId, player) {
+      const connection = await ensureGuest(roomId);
+      send(connection, { type: 'player-presence', roomId, player });
     },
     onSnapshot(ref, callback, onError) {
       const current = listeners.get(ref) || [];
