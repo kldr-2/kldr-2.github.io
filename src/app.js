@@ -630,11 +630,11 @@ function renderAssignmentUI(frag){
       const idx = updatedFrags.findIndex(f => f.id === frag.id);
       if(idx > -1){
         updatedFrags[idx].assigned = newAssigned;
+        state.fragments = updatedFrags;
+        renderAssignmentUI(state.fragments[state.currentIndex]);
+        renderFragmentList();
+        checkRecordAbility();
         if (state.isSingleplayer) {
-          state.fragments = updatedFrags;
-          renderAssignmentUI(frag);
-          checkRecordAbility();
-          renderFragmentList();
           return;
         }
         const fb = await loadFirebase();
@@ -900,7 +900,7 @@ function renderFragmentList(){
       f.assigned.forEach(uid => {
         const p = state.roomData.players.find(x => x.id === uid);
         const hasTake = state.takes[f.id] && state.takes[f.id][uid];
-        if(p) assignHTML += `<div class="assignee-dot ${hasTake?'done':''}" style="color:${p.color}; background:${hasTake?p.color:'transparent'}"></div>`;
+        if(p) assignHTML += `<span class="assignee-chip ${hasTake?'done':''}" title="${p.name}${hasTake ? ' - take recorded' : ' - assigned'}" style="--chip-color:${p.color}"><span class="assignee-dot"></span>${p.name}</span>`;
       });
     }
 

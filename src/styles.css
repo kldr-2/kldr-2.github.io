@@ -157,9 +157,11 @@
   .frag-info{ min-width:0; flex:1; }
   .frag-time{ font-family: var(--font-mono); font-size:11px; color: var(--text-faint); display: block; }
   .frag-status{ font-size:11.5px; margin-top:2px; color: var(--text-faint); }
-  .frag-assignees { display: flex; gap: 4px; margin-top: 4px; }
-  .assignee-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); }
-  .assignee-dot.done { box-shadow: 0 0 4px currentColor; }
+  .frag-assignees { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+  .assignee-chip{ display:inline-flex; align-items:center; gap:4px; max-width:100%; color:var(--chip-color); font-size:10px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .assignee-dot { flex:0 0 auto; width:8px; height:8px; border-radius:50%; border:1px solid var(--chip-color); background:var(--chip-color); }
+  .assignee-chip:not(.done) .assignee-dot{ background:transparent; }
+  .assignee-chip.done .assignee-dot{ box-shadow:0 0 4px var(--chip-color); }
 
   .master-panel{ margin: 10px 20px 12px; background: var(--bg-panel); border:1px solid var(--line); border-radius: var(--radius-panel); padding: 10px 16px; }
   #masterCanvas{ width:100%; height:46px; display:block; border-radius:6px; cursor:pointer; margin-top: 8px;}
