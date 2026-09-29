@@ -5,11 +5,29 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
-const port = Number(process.env.PORT || 5173);
+const port = Number(process.env.PORT || 3000);
 const rooms = new Map();
 const takes = new Map();
 const roomVideos = new Map();
 const subscriptions = new Map();
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webm': 'video/webm',
+  '.mp4': 'video/mp4',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg'
+};
 
 function roomKey(path) {
   const parts = path.split('/');
@@ -104,11 +122,12 @@ const httpServer = createServer(async (request, response) => {
   const filePath = join(root, safePath);
   try {
     const body = await readFile(filePath);
-    const type = extname(filePath) === '.js' ? 'text/javascript' : extname(filePath) === '.css' ? 'text/css' : 'text/html';
+    const ext = extname(filePath).toLowerCase();
+    const type = MIME_TYPES[ext] || 'application/octet-stream';
     response.writeHead(200, { 'Content-Type': type });
     response.end(body);
   } catch {
-    response.writeHead(404);
+    response.writeHead(404, { 'Content-Type': 'text/plain' });
     response.end('Not found');
   }
 });
@@ -144,4 +163,4 @@ wss.on('connection', socket => {
   socket.on('close', () => subscriptions.delete(socket));
 });
 
-httpServer.listen(port, () => console.log(`Loop Booth running at http://localhost:${port}`));
+httpServer.listen(port, '0.0.0.0', () => console.log(`Loop Booth running at http://0.0.0.0:${port}`));

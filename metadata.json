@@ -1,0 +1,8 @@
+{
+  "name": "Loop Booth",
+  "description": "Collaborative browser-based dubbing studio to split videos into lines, assign takes, and export finished dubs.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
