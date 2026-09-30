@@ -30,8 +30,11 @@ const MIME_TYPES = {
 };
 
 function roomKey(path) {
+  if (!path || typeof path !== 'string') return '';
   const parts = path.split('/');
-  return parts[parts.indexOf('rooms') + 1];
+  const idx = parts.indexOf('rooms');
+  if (idx !== -1 && idx + 1 < parts.length) return parts[idx + 1];
+  return parts[parts.length - 1] || '';
 }
 
 function send(socket, message) {
@@ -45,30 +48,35 @@ function broadcast(path, data) {
 }
 
 function dataFor(path) {
-  if (path.includes('/rooms/')) return rooms.get(roomKey(path)) || null;
-  if (path.includes('/takes_')) {
-    const room = path.split('/takes_')[1]?.split('/')[0];
+  if (!path || typeof path !== 'string') return null;
+  if (path.includes('/rooms/') || path.includes('rooms/')) return rooms.get(roomKey(path)) || null;
+  if (path.includes('takes_')) {
+    const room = path.split('takes_')[1]?.split('/')[0];
     return [...(takes.get(room)?.values() || [])];
   }
   return null;
 }
 
 function updatePath(path, data) {
-  if (path.includes('/rooms/')) {
+  if (!path || typeof path !== 'string') return null;
+  if (path.includes('/rooms/') || path.includes('rooms/')) {
     const key = roomKey(path);
+    if (!key) return null;
     const current = rooms.get(key) || {};
     const next = { ...current, ...data };
     rooms.set(key, next);
     broadcast(path, next);
     return next;
   }
-  if (path.includes('/takes_')) {
-    const parts = path.split('/takes_')[1].split('/');
+  if (path.includes('takes_')) {
+    const parts = path.split('takes_')[1]?.split('/') || [];
     const room = parts[0];
     const takeId = parts[1];
+    if (!room || !takeId) return null;
     if (!takes.has(room)) takes.set(room, new Map());
     takes.get(room).set(takeId, data);
-    broadcast(path.split('/').slice(0, -1).join('/'), [...takes.get(room).values()]);
+    const parentPath = path.includes('/') ? path.split('/').slice(0, -1).join('/') : path;
+    broadcast(parentPath, [...takes.get(room).values()]);
     return data;
   }
   return null;
@@ -199,8 +207,9 @@ wss.on('connection', socket => {
         return send(socket, { requestId, success: true });
       }
       if (op === 'player-presence') {
+        if (!player || !player.id) return send(socket, { requestId, success: false });
         const current = rooms.get(roomId) || { id: roomId, players: [] };
-        const existingIndex = (current.players || []).findIndex(p => p.id === player.id);
+        const existingIndex = (current.players || []).findIndex(p => p && p.id === player.id);
         const updatedPlayers = [...(current.players || [])];
         if (existingIndex >= 0) {
           updatedPlayers[existingIndex] = { ...updatedPlayers[existingIndex], ...player };
@@ -221,6 +230,14 @@ wss.on('connection', socket => {
     }
   });
   socket.on('close', () => subscriptions.delete(socket));
+});
+
+httpServer.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`Port ${port} is already in use. Loop Booth dev server is active at http://0.0.0.0:${port}`);
+  } else {
+    console.error('Server error:', err);
+  }
 });
 
 httpServer.listen(port, '0.0.0.0', () => console.log(`Loop Booth running at http://0.0.0.0:${port}`));

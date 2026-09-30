@@ -75,6 +75,23 @@
       <!-- Players injected here -->
     </div>
 
+    <div class="lobby-settings" id="lobbySettings">
+      <div class="setting-item">
+        <div class="setting-text">
+          <div class="setting-title-row">
+            <span class="setting-title">Waveform Match Scoring</span>
+            <span class="setting-badge" id="scoreModeBadge">Score Mode</span>
+          </div>
+          <p class="setting-desc">Score takes 0-100% based on matching original speech rhythm, timing, and audio wave dynamics.</p>
+          <div class="setting-host-only" id="scoringHostNote" style="display:none;">Host controls scoring mode</div>
+        </div>
+        <label class="toggle-switch" title="Toggle Waveform Match Scoring">
+          <input type="checkbox" id="scoringToggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
     <div id="lobbyHostUI" style="display:none; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px;">
       <p style="font-size:14px; color: var(--text-dim);">You are the host. Select the video clip to dub.</p>
       <div class="dropzone" id="hostDropzone">Click or drop a video file here</div>
@@ -112,6 +129,7 @@
     <div class="topbar-left">
       <button class="btn btn-ghost" id="studioBackBtn" style="padding: 6px 10px; font-size: 12px;">Menu</button>
       <span class="room-badge" id="studioRoomBadge">Room: ---</span>
+      <span class="room-badge score-mode-indicator" id="studioScoreModeBadge" style="display:none; color:#FBBF24; border-color:rgba(245,158,11,0.4); background:rgba(245,158,11,0.08);">★ Scoring Mode</span>
       <div class="studio-player-list" id="studioPlayerList"></div>
     </div>
     <div class="topbar-right">
@@ -133,6 +151,7 @@
       <div class="lane-panel">
         <div class="lane-head">
           <div class="lane-title">Line <span id="fragLabel">1</span> of <span id="fragTotal">1</span></div>
+          <div class="lane-score-badge" id="laneScoreBadge" style="display:none;"></div>
         </div>
         <canvas id="waveCanvas"></canvas>
         

@@ -2,13 +2,15 @@
   "name": "loop-booth",
   "private": true,
   "version": "1.0.4",
+  "main": "server.js",
   "type": "module",
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
     "build": "npm run check",
     "lint": "npm run check",
-    "check": "node --check server.js && node --check src/network.js && node --check src/app.js"
+    "check": "node --check server.js && node --check src/network.js && node --check src/app.js",
+    "test": "npm run check"
   },
   "dependencies": {
     "ws": "^8.18.0"

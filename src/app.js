@@ -21,6 +21,7 @@ const state = {
   roomId: null,
   isHost: false,
   isSingleplayer: false,
+  scoringMode: false,
   roomData: null, // latest snapshot of room doc
   
   // Audio/Video state
@@ -55,7 +56,7 @@ const state = {
   playerActivities: {} // uid -> { activity, fragId, fragIndex, playerName, updatedAt }
 };
 
-const el = (id) => document.getElementById(id);
+const el = (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null);
 
 function showNotice(msg, type = 'error', durationMs = 4200){
   const container = el('toastContainer');
@@ -136,34 +137,79 @@ function showNotice(msg, type = 'error', durationMs = 4200){
 
 let confirmCallback = null;
 function showConfirm(title, desc, callback) {
+  if (!el('confirmModal')) return;
   el('confirmTitle').textContent = title;
   el('confirmDesc').textContent = desc;
   confirmCallback = callback;
   el('confirmModal').classList.add('active');
 }
-el('confirmCancelBtn').onclick = () => {
-  el('confirmModal').classList.remove('active');
-  confirmCallback = null;
-};
-el('confirmOkBtn').onclick = () => {
-  el('confirmModal').classList.remove('active');
-  if (confirmCallback) confirmCallback();
-};
-el('confirmModal').onclick = (e) => {
-  if (e.target === el('confirmModal')) {
-    el('confirmModal').classList.remove('active');
-    confirmCallback = null;
-  }
-};
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && el('confirmModal').classList.contains('active')) {
-    el('confirmModal').classList.remove('active');
-    confirmCallback = null;
-  }
-});
 
-el('savedDubsBtn').onclick = () => switchScreen('savedDubsScreen');
-el('savedDubsBackBtn').onclick = () => switchScreen('setupScreen');
+if (typeof document !== 'undefined') {
+  const cancelBtn = el('confirmCancelBtn');
+  if (cancelBtn) cancelBtn.onclick = () => {
+    if (el('confirmModal')) el('confirmModal').classList.remove('active');
+    confirmCallback = null;
+  };
+
+  const okBtn = el('confirmOkBtn');
+  if (okBtn) okBtn.onclick = () => {
+    if (el('confirmModal')) el('confirmModal').classList.remove('active');
+    if (confirmCallback) confirmCallback();
+  };
+
+  const modalEl = el('confirmModal');
+  if (modalEl) modalEl.onclick = (e) => {
+    if (e.target === modalEl) {
+      modalEl.classList.remove('active');
+      confirmCallback = null;
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && el('confirmModal')?.classList.contains('active')) {
+        el('confirmModal').classList.remove('active');
+        confirmCallback = null;
+      }
+    });
+  }
+
+  const savedDubsBtn = el('savedDubsBtn');
+  if (savedDubsBtn) savedDubsBtn.onclick = () => switchScreen('savedDubsScreen');
+
+  const savedDubsBackBtn = el('savedDubsBackBtn');
+  if (savedDubsBackBtn) savedDubsBackBtn.onclick = () => switchScreen('setupScreen');
+
+  const scoringToggle = el('scoringToggle');
+  if (scoringToggle) {
+    scoringToggle.onchange = async () => {
+      state.scoringMode = Boolean(scoringToggle.checked);
+      if (el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
+      if (el('studioScoreModeBadge')) el('studioScoreModeBadge').style.display = state.scoringMode ? 'inline-flex' : 'none';
+
+      showNotice(
+        state.scoringMode
+          ? "Wave Match Scoring enabled! Takes will be scored based on voice dynamics & rhythm."
+          : "Wave Match Scoring disabled.",
+        "info",
+        2400
+      );
+
+      if (!isSoloSession() && state.isHost && state.roomId) {
+        sendPlaybackEvent({ action: 'toggle-scoring', scoringMode: state.scoringMode });
+        try {
+          const fb = await loadFirebase();
+          if (fb) {
+            const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+            await fb.updateDoc(roomRef, { scoringMode: state.scoringMode });
+          }
+        } catch (err) {
+          console.warn("Failed to sync scoring mode to room:", err);
+        }
+      }
+    };
+  }
+}
 
 function isSoloSession() {
   return Boolean(state.isSingleplayer || !state.roomId || state.roomId === 'LOCAL');
@@ -178,12 +224,15 @@ function resetToMenu() {
   
   if (state.videoURL) { URL.revokeObjectURL(state.videoURL); state.videoURL = null; }
   const video = el('mainVideo');
-  video.removeAttribute('src');
-  video.load();
+  if (video) {
+    video.removeAttribute('src');
+    video.load();
+  }
 
   state.roomId = null;
   state.isHost = false;
   state.isSingleplayer = false;
+  state.scoringMode = false;
   state.roomData = null;
   state.file = null;
   state.duration = 0;
@@ -198,32 +247,52 @@ function resetToMenu() {
   state.editMode = false;
   state.undoStack = [];
   state.playerActivities = {};
-  el('undoBtn').disabled = true;
-  
-  el('setupLoader').style.display = 'none';
-  el('lobbyHostUI').style.display = 'none';
-  el('lobbyGuestUI').style.display = 'none';
-  el('startStudioBtn').disabled = true;
-  el('hostFileInput').value = '';
-  el('hostDropzone').textContent = 'Click or drop a video file here';
+
+  if (el('undoBtn')) el('undoBtn').disabled = true;
+  if (el('setupLoader')) el('setupLoader').style.display = 'none';
+  if (el('lobbyHostUI')) el('lobbyHostUI').style.display = 'none';
+  if (el('lobbyGuestUI')) el('lobbyGuestUI').style.display = 'none';
+  if (el('startStudioBtn')) el('startStudioBtn').disabled = true;
+  if (el('hostFileInput')) el('hostFileInput').value = '';
+  if (el('hostDropzone')) el('hostDropzone').textContent = 'Click or drop a video file here';
+  if (el('scoringToggle')) {
+    el('scoringToggle').checked = false;
+    el('scoringToggle').disabled = false;
+  }
+  if (el('scoringHostNote')) el('scoringHostNote').style.display = 'none';
+  if (el('scoreModeBadge')) el('scoreModeBadge').classList.remove('active');
+  if (el('studioScoreModeBadge')) el('studioScoreModeBadge').style.display = 'none';
+  if (el('laneScoreBadge')) {
+    el('laneScoreBadge').style.display = 'none';
+    el('laneScoreBadge').className = 'lane-score-badge';
+  }
   
   switchScreen('setupScreen');
 }
 
-el('lobbyBackBtn').onclick = () => {
-  if (isSoloSession()) {
-    resetToMenu();
-    return;
+if (typeof document !== 'undefined') {
+  const lobbyBackBtn = el('lobbyBackBtn');
+  if (lobbyBackBtn) {
+    lobbyBackBtn.onclick = () => {
+      if (isSoloSession()) {
+        resetToMenu();
+        return;
+      }
+      showConfirm('Leave Lobby?', 'Are you sure you want to return to the main menu? You will disconnect from this room.', resetToMenu);
+    };
   }
-  showConfirm('Leave Lobby?', 'Are you sure you want to return to the main menu? You will disconnect from this room.', resetToMenu);
-};
-el('studioBackBtn').onclick = () => {
-  if (isSoloSession()) {
-    resetToMenu();
-    return;
+
+  const studioBackBtn = el('studioBackBtn');
+  if (studioBackBtn) {
+    studioBackBtn.onclick = () => {
+      if (isSoloSession()) {
+        resetToMenu();
+        return;
+      }
+      showConfirm('Leave Studio?', 'Are you sure you want to return to the main menu? You will disconnect from this session.', resetToMenu);
+    };
   }
-  showConfirm('Leave Studio?', 'Are you sure you want to return to the main menu? You will disconnect from this session.', resetToMenu);
-};
+}
 
 function switchScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -276,72 +345,91 @@ function renderLobbyPlayers(players, hostId){
   }).join('');
 }
 
-el('singleplayerBtn').onclick = () => {
-  state.isSingleplayer = true;
-  state.uid = 'local_player';
-  state.isHost = true;
-  state.roomId = 'LOCAL';
-  state.me = { id: state.uid, name: 'You', color: PLAYER_COLORS[0], ready: true };
-  state.roomData = {
-    id: 'LOCAL',
-    hostId: state.uid,
-    players: [state.me],
-    status: 'lobby',
-    videoName: null,
-    videoSize: null,
-    fragments: []
-  };
-  
-  el('lobbyRoomCode').textContent = 'SOLO';
-  el('lobbyPlayerList').innerHTML = `
-    <div class="player-row">
-      <div class="player-swatch" style="background:${state.me.color}"></div>
-      <div class="player-name">You (Solo)</div>
-      <div class="player-status ready">Ready</div>
-    </div>
-  `;
-  el('lobbyHostUI').style.display = 'block';
-  el('startStudioBtn').disabled = true; // wait for file
-  switchScreen('lobbyScreen');
-};
-
-el('createRoomBtn').onclick = async () => {
-  const name = el('playerNameInput').value.trim() || 'Host';
-  try {
-    const ok = await authenticate();
-    if(!ok) return showNotice("Could not connect to authentication service.", "error");
-    const fb = await loadFirebase();
-    if(!fb) return showNotice("Could not initialize connection.", "error");
-    
-    const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
-    state.roomId = roomId;
+if (el('singleplayerBtn')) {
+  el('singleplayerBtn').onclick = () => {
+    state.isSingleplayer = true;
+    state.uid = 'local_player';
     state.isHost = true;
-    state.isSingleplayer = false;
-    state.me = { id: state.uid, name, color: PLAYER_COLORS[0], ready: false };
-    
-    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
-    await fb.setDoc(roomRef, {
-      id: roomId,
+    state.roomId = 'LOCAL';
+    state.me = { id: state.uid, name: 'You', color: PLAYER_COLORS[0], ready: true };
+    state.roomData = {
+      id: 'LOCAL',
       hostId: state.uid,
       players: [state.me],
       status: 'lobby',
       videoName: null,
       videoSize: null,
+      scoringMode: state.scoringMode,
       fragments: []
-    });
+    };
     
-    listenToRoom();
-    switchScreen('lobbyScreen');
-    showNotice(`Room created! Code: ${roomId}`, "success", 3000);
-  } catch(err) {
-    console.error("Create room error:", err);
-    showNotice("Failed to create room: " + (err?.message || "network error"), "error");
-  } finally {
-    el('setupLoader').style.display = 'none';
-  }
-};
+    el('lobbyRoomCode').textContent = 'SOLO';
+    el('lobbyPlayerList').innerHTML = `
+      <div class="player-row">
+        <div class="player-swatch" style="background:${state.me.color}"></div>
+        <div class="player-name">You (Solo)</div>
+        <div class="player-status ready">Ready</div>
+      </div>
+    `;
+    if(el('scoringToggle')) {
+      el('scoringToggle').disabled = false;
+      el('scoringToggle').checked = state.scoringMode;
+    }
+    if(el('scoringHostNote')) el('scoringHostNote').style.display = 'none';
+    if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
 
-el('joinRoomBtn').onclick = async () => {
+    el('lobbyHostUI').style.display = 'block';
+    el('startStudioBtn').disabled = true; // wait for file
+    switchScreen('lobbyScreen');
+  };
+}
+
+if (el('createRoomBtn')) {
+  el('createRoomBtn').onclick = async () => {
+    const name = el('playerNameInput')?.value.trim() || 'Host';
+    try {
+      const ok = await authenticate();
+      if(!ok) return showNotice("Could not connect to authentication service.", "error");
+      const fb = await loadFirebase();
+      if(!fb) return showNotice("Could not initialize connection.", "error");
+      
+      const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
+      state.roomId = roomId;
+      state.isHost = true;
+      state.isSingleplayer = false;
+      state.scoringMode = Boolean(el('scoringToggle')?.checked);
+      state.me = { id: state.uid, name, color: PLAYER_COLORS[0], ready: false };
+      
+      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+      await fb.setDoc(roomRef, {
+        id: roomId,
+        hostId: state.uid,
+        players: [state.me],
+        status: 'lobby',
+        videoName: null,
+        videoSize: null,
+        scoringMode: state.scoringMode,
+        fragments: []
+      });
+      
+      if(el('scoringToggle')) el('scoringToggle').disabled = false;
+      if(el('scoringHostNote')) el('scoringHostNote').style.display = 'none';
+      if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
+
+      listenToRoom();
+      switchScreen('lobbyScreen');
+      showNotice(`Room created! Code: ${roomId}`, "success", 3000);
+    } catch(err) {
+      console.error("Create room error:", err);
+      showNotice("Failed to create room: " + (err?.message || "network error"), "error");
+    } finally {
+      if (el('setupLoader')) el('setupLoader').style.display = 'none';
+    }
+  };
+}
+
+if (el('joinRoomBtn')) {
+  el('joinRoomBtn').onclick = async () => {
   const name = el('playerNameInput').value.trim() || 'Guest';
   const roomId = el('roomCodeInput').value.trim().toUpperCase();
   if(!roomId) return showNotice("Please enter a room code.", "warning");
@@ -365,7 +453,19 @@ el('joinRoomBtn').onclick = async () => {
     state.roomId = roomId;
     state.isHost = false;
     state.isSingleplayer = false;
+    state.scoringMode = Boolean(data.scoringMode);
     state.roomData = { ...data, players: [...data.players, state.me] };
+
+    if(el('scoringToggle')) {
+      el('scoringToggle').checked = state.scoringMode;
+      el('scoringToggle').disabled = true;
+    }
+    if(el('scoringHostNote')) {
+      el('scoringHostNote').style.display = 'block';
+      el('scoringHostNote').textContent = 'Host controls scoring mode';
+    }
+    if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
+
     el('lobbyRoomCode').textContent = data.id;
     renderLobbyPlayers(state.roomData.players, data.hostId);
     el('lobbyGuestUI').style.display = 'block';
@@ -379,9 +479,10 @@ el('joinRoomBtn').onclick = async () => {
     console.error('Join room error:', error);
     showNotice("Could not join that room: " + (error?.message || "network error"), "error");
   } finally {
-    el('setupLoader').style.display = 'none';
+    if (el('setupLoader')) el('setupLoader').style.display = 'none';
   }
-};
+  };
+}
 
 function listenToRoom(){
   if(state.roomEventUnsub) state.roomEventUnsub();
@@ -397,6 +498,29 @@ function listenToRoom(){
       // Update Lobby UI
       el('lobbyRoomCode').textContent = data.id;
       renderLobbyPlayers(data.players || [], data.hostId);
+
+      // Sync scoring mode from room doc
+      if (typeof data.scoringMode === 'boolean') {
+        state.scoringMode = data.scoringMode;
+        if (el('scoringToggle')) {
+          el('scoringToggle').checked = state.scoringMode;
+          el('scoringToggle').disabled = !state.isHost;
+        }
+        if (el('scoringHostNote')) {
+          el('scoringHostNote').style.display = state.isHost ? 'none' : 'block';
+        }
+        if (el('scoreModeBadge')) {
+          el('scoreModeBadge').classList.toggle('active', state.scoringMode);
+        }
+        if (el('studioScoreModeBadge')) {
+          el('studioScoreModeBadge').style.display = state.scoringMode ? 'inline-flex' : 'none';
+        }
+        if (el('studioScreen')?.classList.contains('active')) {
+          updateLaneScoreDisplay(state.fragments[state.currentIndex]);
+          renderFragmentList();
+          renderStudioPlayerList();
+        }
+      }
 
       if(data.status === 'lobby'){
         if(state.isHost){
@@ -524,64 +648,74 @@ async function handleHostFile(file){
   }
 }
 
-el('hostDropzone').onclick = () => el('hostFileInput').click();
-el('hostFileInput').onchange = (e) => {
-  const file = e.target.files && e.target.files[0];
-  handleHostFile(file);
-};
+if (el('hostDropzone')) {
+  el('hostDropzone').onclick = () => el('hostFileInput')?.click();
 
-['dragenter', 'dragover'].forEach(eventName => {
-  el('hostDropzone').addEventListener(eventName, (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    el('hostDropzone').classList.add('drag-over');
+  ['dragenter', 'dragover'].forEach(eventName => {
+    el('hostDropzone').addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el('hostDropzone').classList.add('drag-over');
+    });
   });
-});
 
-['dragleave', 'drop'].forEach(eventName => {
-  el('hostDropzone').addEventListener(eventName, (e) => {
+  ['dragleave', 'drop'].forEach(eventName => {
+    el('hostDropzone').addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el('hostDropzone').classList.remove('drag-over');
+    });
+  });
+
+  el('hostDropzone').addEventListener('drop', (e) => {
     e.preventDefault();
     e.stopPropagation();
     el('hostDropzone').classList.remove('drag-over');
+    const dt = e.dataTransfer;
+    if(dt && dt.files && dt.files.length > 0){
+      handleHostFile(dt.files[0]);
+    }
   });
-});
+}
 
-el('hostDropzone').addEventListener('drop', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  el('hostDropzone').classList.remove('drag-over');
-  const dt = e.dataTransfer;
-  if(dt && dt.files && dt.files.length > 0){
-    handleHostFile(dt.files[0]);
-  }
-});
+if (el('hostFileInput')) {
+  el('hostFileInput').onchange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    handleHostFile(file);
+  };
+}
 
-el('startStudioBtn').onclick = async () => {
-  if (isSoloSession()) {
-    if(!state.file){
-      return showNotice("Please select a video file before starting studio.", "warning");
+if (el('startStudioBtn')) {
+  el('startStudioBtn').onclick = async () => {
+    if (isSoloSession()) {
+      if(!state.file){
+        return showNotice("Please select a video file before starting studio.", "warning");
+      }
+      state.roomData.status = 'studio';
+      enterStudio();
+      return;
     }
-    state.roomData.status = 'studio';
-    enterStudio();
-    return;
-  }
-  try {
-    const fb = await loadFirebase();
-    if(!fb) return showNotice("Connection lost. Please refresh.", "error");
-    if(!state.file && !state.roomData?.videoName){
-      return showNotice("Please upload a video clip before starting the studio.", "warning");
+    try {
+      const fb = await loadFirebase();
+      if(!fb) return showNotice("Connection lost. Please refresh.", "error");
+      if(!state.file && !state.roomData?.videoName){
+        return showNotice("Please upload a video clip before starting the studio.", "warning");
+      }
+      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+      await fb.updateDoc(roomRef, { status: 'studio' });
+    } catch(err) {
+      console.error("Start studio error:", err);
+      showNotice("Could not start studio session: " + (err?.message || "network error"), "error");
     }
-    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-    await fb.updateDoc(roomRef, { status: 'studio' });
-  } catch(err) {
-    console.error("Start studio error:", err);
-    showNotice("Could not start studio session: " + (err?.message || "network error"), "error");
-  }
-};
+  };
+}
 
 async function enterStudio(){
   switchScreen('studioScreen');
   el('studioRoomBadge').textContent = state.isSingleplayer ? 'Mode: Solo' : `Room: ${state.roomId}`;
+  if (el('studioScoreModeBadge')) {
+    el('studioScoreModeBadge').style.display = state.scoringMode ? 'inline-flex' : 'none';
+  }
   
   renderStudioPlayerList();
   
@@ -590,6 +724,19 @@ async function enterStudio(){
   el('assignPanel').style.display = state.isSingleplayer ? 'none' : 'flex';
   
   const video = el('mainVideo');
+  if (video) {
+    video.onerror = () => {
+      const err = video.error;
+      let msg = "Video playback encountered an issue.";
+      if (err) {
+        if (err.code === 1) msg = "Video loading was aborted.";
+        else if (err.code === 2) msg = "Network error while loading video.";
+        else if (err.code === 3) msg = "Video decoding error or corrupted format.";
+        else if (err.code === 4) msg = "Video format or codec not supported by this browser.";
+      }
+      showNotice(msg, "error");
+    };
+  }
 
   // Immediately ensure video element has a source so playback is never blocked
   if (state.file) {
@@ -711,6 +858,7 @@ async function enterStudio(){
     renderFragmentList();
     if(state.fragments[state.currentIndex]) {
       drawWave(state.fragments[state.currentIndex]);
+      updateLaneScoreDisplay(state.fragments[state.currentIndex]);
     }
     checkRecordAbility();
   });
@@ -888,8 +1036,10 @@ function listenToTakes(){
       }
       // Refresh UI
       renderFragmentList();
+      renderStudioPlayerList();
       if(state.fragments[state.currentIndex]){
         drawWave(state.fragments[state.currentIndex]);
+        updateLaneScoreDisplay(state.fragments[state.currentIndex]);
         checkRecordAbility();
       }
     }, (err) => console.error("Takes sync error", err));
@@ -992,10 +1142,24 @@ function renderStudioPlayerList(){
     const hostTag = isHost ? '<span class="role-tag">Host</span>' : '';
     const youTag = isMe ? '<span class="you-tag">(You)</span>' : '';
 
+    let scoreTag = '';
+    if (state.scoringMode) {
+      const pScores = [];
+      Object.values(state.takes).forEach(takesObj => {
+        if (takesObj && takesObj[p.id] && typeof takesObj[p.id].score === 'number' && takesObj[p.id].score > 0) {
+          pScores.push(takesObj[p.id].score);
+        }
+      });
+      if (pScores.length > 0) {
+        const avg = Math.round(pScores.reduce((a, b) => a + b, 0) / pScores.length);
+        scoreTag = `<span class="player-score-tag" title="Average wave match: ${avg}% across ${pScores.length} line(s)">★ ${avg}%</span>`;
+      }
+    }
+
     return `
       <div class="studio-player-badge ${badgeClass}" data-player-id="${p.id}" data-frag-index="${typeof act.fragIndex === 'number' ? act.fragIndex : ''}" title="Click to view ${p.name}'s active line">
         <div class="p-dot" style="background:${p.color || '#B285F5'}"></div>
-        <span class="p-name">${p.name || 'Player'}${youTag}${hostTag}</span>
+        <span class="p-name">${p.name || 'Player'}${youTag}${hostTag}${scoreTag}</span>
         <span class="p-state">${badgeContent}</span>
       </div>
     `;
@@ -1093,31 +1257,36 @@ function selectFragment(idx, skipRedraw = false, isRemote = false){
     renderMasterCanvas();
   }
   drawWave(f);
+  updateLaneScoreDisplay(f);
 
   if(!state.isSingleplayer && state.roomId && !isRemote){
     broadcastMyActivity('idle', f.id, idx);
   }
 }
 
-el('prevFragBtn').onclick = () => {
-  if(!state.fragments || state.fragments.length === 0){
-    return showNotice("No dub lines available.", "info");
-  }
-  if(state.currentIndex <= 0){
-    return showNotice("Already on the first line.", "info", 1800);
-  }
-  selectFragment(state.currentIndex - 1);
-};
+if (el('prevFragBtn')) {
+  el('prevFragBtn').onclick = () => {
+    if(!state.fragments || state.fragments.length === 0){
+      return showNotice("No dub lines available.", "info");
+    }
+    if(state.currentIndex <= 0){
+      return showNotice("Already on the first line.", "info", 1800);
+    }
+    selectFragment(state.currentIndex - 1);
+  };
+}
 
-el('nextFragBtn').onclick = () => {
-  if(!state.fragments || state.fragments.length === 0){
-    return showNotice("No dub lines available.", "info");
-  }
-  if(state.currentIndex >= state.fragments.length - 1){
-    return showNotice("Already on the last line.", "info", 1800);
-  }
-  selectFragment(state.currentIndex + 1);
-};
+if (el('nextFragBtn')) {
+  el('nextFragBtn').onclick = () => {
+    if(!state.fragments || state.fragments.length === 0){
+      return showNotice("No dub lines available.", "info");
+    }
+    if(state.currentIndex >= state.fragments.length - 1){
+      return showNotice("Already on the last line.", "info", 1800);
+    }
+    selectFragment(state.currentIndex + 1);
+  };
+}
 
 function saveState() {
   state.undoStack.push({
@@ -1128,32 +1297,34 @@ function saveState() {
   if (state.isHost) el('undoBtn').disabled = false;
 }
 
-el('undoBtn').onclick = async () => {
-  if (!state.isHost) return showNotice("Only the room host can undo line edits.", "warning");
-  if (state.undoStack.length === 0) return showNotice("Nothing to undo.", "info", 1800);
-  try {
-    const snap = state.undoStack.pop();
-    if (state.undoStack.length === 0) el('undoBtn').disabled = true;
+if (el('undoBtn')) {
+  el('undoBtn').onclick = async () => {
+    if (!state.isHost) return showNotice("Only the room host can undo line edits.", "warning");
+    if (state.undoStack.length === 0) return showNotice("Nothing to undo.", "info", 1800);
+    try {
+      const snap = state.undoStack.pop();
+      if (state.undoStack.length === 0) el('undoBtn').disabled = true;
 
-    if (isSoloSession()) {
-      state.fragments = snap.fragments;
-      state.currentIndex = Math.min(snap.currentIndex, state.fragments.length - 1);
-      renderMasterCanvas();
-      renderFragmentList();
-      if (state.fragments.length > 0) selectFragment(state.currentIndex, true);
-    } else {
-      const fb = await loadFirebase();
-      if(fb && state.roomId){
-        const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-        await fb.updateDoc(roomRef, { fragments: snap.fragments });
+      if (isSoloSession()) {
+        state.fragments = snap.fragments;
+        state.currentIndex = Math.min(snap.currentIndex, state.fragments.length - 1);
+        renderMasterCanvas();
+        renderFragmentList();
+        if (state.fragments.length > 0) selectFragment(state.currentIndex, true);
+      } else {
+        const fb = await loadFirebase();
+        if(fb && state.roomId){
+          const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+          await fb.updateDoc(roomRef, { fragments: snap.fragments });
+        }
       }
+      showNotice("Reverted line edit.", "info", 1800);
+    } catch(err) {
+      console.error("Undo error:", err);
+      showNotice("Failed to undo edit: " + (err?.message || "error"), "error");
     }
-    showNotice("Reverted line edit.", "info", 1800);
-  } catch(err) {
-    console.error("Undo error:", err);
-    showNotice("Failed to undo edit: " + (err?.message || "error"), "error");
-  }
-};
+  };
+}
 
 async function mergeWithNext(index) {
   if (!state.isHost) return showNotice("Only the room host can merge lines.", "warning");
@@ -1198,61 +1369,65 @@ async function mergeWithNext(index) {
 }
 
 // Edit Mode (Host only)
-el('editToggleInput').onchange = (e) => {
-  if(!state.isHost) {
-    e.target.checked = false;
-    return showNotice("Only the host can enable line editing.", "warning");
-  }
-  state.editMode = e.target.checked;
-  el('editToggle').classList.toggle('on', state.editMode);
-  showNotice(state.editMode ? "Line edit mode enabled. Click anywhere on the timeline to split lines." : "Line edit mode disabled.", "info", 2200);
-};
-
-el('masterCanvas').onclick = async (e) => {
-  if(state.fragments.length === 0) return showNotice("No dub lines loaded.", "info");
-  const rect = el('masterCanvas').getBoundingClientRect();
-  const t = ((e.clientX - rect.left) / rect.width) * state.duration;
-  
-  if(state.editMode && state.isHost){
-    const idx = state.fragments.findIndex(f => t > f.start && t < f.end);
-    if(idx > -1) {
-      const f = state.fragments[idx];
-      if(t - f.start < 0.3 || f.end - t < 0.3) {
-        return showNotice("Slice too close to line boundary (minimum 0.3s).", "warning", 2400);
-      }
-      
-      try {
-        saveState();
-        
-        const a = { id: 'f_'+Math.random().toString(36).slice(2,6), start: f.start, end: t, assigned: [...(f.assigned || [])] };
-        const b = { id: 'f_'+Math.random().toString(36).slice(2,6), start: t, end: f.end, assigned: [...(f.assigned || [])] };
-        const newFrags = [...state.fragments];
-        newFrags.splice(idx, 1, a, b);
-        
-        state.fragments = newFrags;
-        renderMasterCanvas();
-        renderFragmentList();
-        selectFragment(idx, true);
-        showNotice(`Split Line ${idx + 1} at ${t.toFixed(1)}s.`, "info", 2000);
-        
-        if (!isSoloSession() && state.roomId) {
-          sendPlaybackEvent({ action: 'sync-fragments', fragments: newFrags, activeLineIndex: idx });
-          const fb = await loadFirebase();
-          if(fb){
-            const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-            await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: idx });
-          }
-        }
-      } catch(err) {
-        console.error("Split line error:", err);
-        showNotice("Could not split line: " + (err?.message || "error"), "error");
-      }
+if (el('editToggleInput')) {
+  el('editToggleInput').onchange = (e) => {
+    if(!state.isHost) {
+      e.target.checked = false;
+      return showNotice("Only the host can enable line editing.", "warning");
     }
-  } else {
-    const idx = state.fragments.findIndex(f => t >= f.start && t <= f.end);
-    if(idx > -1) selectFragment(idx);
-  }
-};
+    state.editMode = e.target.checked;
+    if (el('editToggle')) el('editToggle').classList.toggle('on', state.editMode);
+    showNotice(state.editMode ? "Line edit mode enabled. Click anywhere on the timeline to split lines." : "Line edit mode disabled.", "info", 2200);
+  };
+}
+
+if (el('masterCanvas')) {
+  el('masterCanvas').onclick = async (e) => {
+    if(state.fragments.length === 0) return showNotice("No dub lines loaded.", "info");
+    const rect = el('masterCanvas').getBoundingClientRect();
+    const t = ((e.clientX - rect.left) / rect.width) * state.duration;
+    
+    if(state.editMode && state.isHost){
+      const idx = state.fragments.findIndex(f => t > f.start && t < f.end);
+      if(idx > -1) {
+        const f = state.fragments[idx];
+        if(t - f.start < 0.3 || f.end - t < 0.3) {
+          return showNotice("Slice too close to line boundary (minimum 0.3s).", "warning", 2400);
+        }
+        
+        try {
+          saveState();
+          
+          const a = { id: 'f_'+Math.random().toString(36).slice(2,6), start: f.start, end: t, assigned: [...(f.assigned || [])] };
+          const b = { id: 'f_'+Math.random().toString(36).slice(2,6), start: t, end: f.end, assigned: [...(f.assigned || [])] };
+          const newFrags = [...state.fragments];
+          newFrags.splice(idx, 1, a, b);
+          
+          state.fragments = newFrags;
+          renderMasterCanvas();
+          renderFragmentList();
+          selectFragment(idx, true);
+          showNotice(`Split Line ${idx + 1} at ${t.toFixed(1)}s.`, "info", 2000);
+          
+          if (!isSoloSession() && state.roomId) {
+            sendPlaybackEvent({ action: 'sync-fragments', fragments: newFrags, activeLineIndex: idx });
+            const fb = await loadFirebase();
+            if(fb){
+              const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+              await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: idx });
+            }
+          }
+        } catch(err) {
+          console.error("Split line error:", err);
+          showNotice("Could not split line: " + (err?.message || "error"), "error");
+        }
+      }
+    } else {
+      const idx = state.fragments.findIndex(f => t >= f.start && t <= f.end);
+      if(idx > -1) selectFragment(idx);
+    }
+  };
+}
 
 function envelopeSlice(frag, pixelWidth){
   const out = new Float32Array(pixelWidth);
@@ -1334,6 +1509,151 @@ function drawWave(frag, progress = 0){
   }
 }
 
+function getScoreTier(score) {
+  if (score >= 88) return { tier: 's', label: 'Perfect Match', toastType: 'success' };
+  if (score >= 72) return { tier: 'a', label: 'Great Match', toastType: 'success' };
+  if (score >= 50) return { tier: 'b', label: 'Good Match', toastType: 'info' };
+  return { tier: 'c', label: 'Needs Practice', toastType: 'warning' };
+}
+
+function getBufferEnvelope(buffer, bins = 100) {
+  if (!buffer) return null;
+  const data = buffer.getChannelData(0);
+  const total = data.length;
+  if (total === 0) return null;
+  const binSize = Math.max(1, Math.floor(total / bins));
+  const env = new Float32Array(bins);
+  let peak = 0;
+  for (let b = 0; b < bins; b++) {
+    const start = b * binSize;
+    const end = Math.min(start + binSize, total);
+    let sum = 0;
+    for (let i = start; i < end; i++) {
+      sum += data[i] * data[i];
+    }
+    const rms = Math.sqrt(sum / Math.max(1, end - start));
+    env[b] = rms;
+    if (rms > peak) peak = rms;
+  }
+  return { env, peak };
+}
+
+function computeWaveMatchScore(frag, recordedBuffer, recordedTrace) {
+  if (!frag) return 0;
+  const BINS = 100;
+
+  // 1. Target envelope from original video audio for this line
+  const origEnv = envelopeSlice(frag, BINS);
+  let origPeak = 0;
+  for (let i = 0; i < BINS; i++) {
+    if (origEnv[i] > origPeak) origPeak = origEnv[i];
+  }
+
+  // 2. User recorded envelope
+  let userEnv = null;
+  let userPeak = 0;
+
+  const bufResult = getBufferEnvelope(recordedBuffer, BINS);
+  if (bufResult && bufResult.peak > 0) {
+    userEnv = bufResult.env;
+    userPeak = bufResult.peak;
+  } else if (recordedTrace && recordedTrace.length > 0) {
+    userEnv = new Float32Array(BINS);
+    for (let b = 0; b < BINS; b++) {
+      const idx = Math.min(recordedTrace.length - 1, Math.floor((b / BINS) * recordedTrace.length));
+      const val = recordedTrace[idx] || 0;
+      userEnv[b] = val;
+      if (val > userPeak) userPeak = val;
+    }
+  }
+
+  // Silent or negligible recording
+  if (!userEnv || userPeak < 0.012) {
+    return 0;
+  }
+
+  // Normalize user envelope to 0..1
+  const normUser = new Float32Array(BINS);
+  for (let i = 0; i < BINS; i++) {
+    normUser[i] = Math.min(1, userEnv[i] / (userPeak || 1));
+  }
+
+  // 3. Statistical correlation (Pearson r) between original speech dynamics and take
+  let sumO = 0, sumU = 0;
+  for (let i = 0; i < BINS; i++) {
+    sumO += origEnv[i];
+    sumU += normUser[i];
+  }
+  const meanO = sumO / BINS;
+  const meanU = sumU / BINS;
+
+  let num = 0, denO = 0, denU = 0;
+  let matchCount = 0;
+  let absDiffSum = 0;
+
+  for (let i = 0; i < BINS; i++) {
+    const do_ = origEnv[i] - meanO;
+    const du_ = normUser[i] - meanU;
+    num += do_ * du_;
+    denO += do_ * do_;
+    denU += du_ * du_;
+
+    // Voice activity detection threshold: is speech active in this bin?
+    const actO = origEnv[i] > 0.18;
+    const actU = normUser[i] > 0.18;
+    if (actO === actU) matchCount++;
+
+    absDiffSum += Math.abs(origEnv[i] - normUser[i]);
+  }
+
+  const den = Math.sqrt(denO * denU);
+  const r = den > 0.0001 ? num / den : 0;
+
+  // Correlation component (0-100)
+  const rScore = Math.max(0, Math.min(100, Math.round(((r + 0.15) / 1.15) * 100)));
+
+  // Timing alignment component (0-100)
+  const timingScore = Math.round((matchCount / BINS) * 100);
+
+  // Waveform shape distance component (0-100)
+  const diffScore = Math.max(0, Math.min(100, Math.round((1 - (absDiffSum / BINS)) * 100)));
+
+  // Composite weighted score
+  const finalScore = Math.max(
+    0,
+    Math.min(100, Math.round(0.45 * rScore + 0.35 * timingScore + 0.20 * diffScore))
+  );
+
+  return finalScore;
+}
+
+function updateLaneScoreDisplay(frag) {
+  const badge = el('laneScoreBadge');
+  if (!badge) return;
+  if (!state.scoringMode || !frag) {
+    badge.style.display = 'none';
+    return;
+  }
+  badge.style.display = 'inline-flex';
+  const takes = state.takes[frag.id] || {};
+  let targetTake = takes[state.uid];
+  if (!targetTake) {
+    const all = Object.values(takes);
+    if (all.length > 0) {
+      targetTake = all.reduce((best, t) => (t.score || 0) > (best.score || 0) ? t : best, all[0]);
+    }
+  }
+
+  if (targetTake && typeof targetTake.score === 'number' && targetTake.score > 0) {
+    const info = getScoreTier(targetTake.score);
+    badge.className = `lane-score-badge tier-${info.tier}`;
+    badge.innerHTML = `★ <strong>${targetTake.score}%</strong> <span>${info.label}</span>`;
+  } else {
+    badge.className = 'lane-score-badge';
+    badge.innerHTML = `<span style="opacity:0.75;">Waveform Scoring:</span> <span style="font-weight:400; opacity:0.9;">Record take to score</span>`;
+  }
+}
+
 function renderMasterCanvas(){
   const canvas = el('masterCanvas');
   const dpr = window.devicePixelRatio || 1;
@@ -1374,10 +1694,16 @@ function renderFragmentList(){
     } else {
       assignedList.forEach(uid => {
         const p = roomPlayers.find(x => x.id === uid);
-        const hasTake = state.takes[f.id] && state.takes[f.id][uid];
+        const take = state.takes[f.id] && state.takes[f.id][uid];
+        const hasTake = Boolean(take);
         const pName = p ? p.name : (uid === state.uid ? (state.me?.name || 'You') : 'Player');
         const pColor = p ? p.color : '#B285F5';
-        assignHTML += `<span class="assignee-chip ${hasTake?'done':''}" title="${pName}${hasTake ? ' - take recorded' : ' - assigned'}" style="--chip-color:${pColor}"><span class="assignee-dot"></span>${pName}</span>`;
+        let scorePill = '';
+        if (state.scoringMode && take && typeof take.score === 'number' && take.score > 0) {
+          const tier = getScoreTier(take.score).tier;
+          scorePill = `<span class="score-pill tier-${tier}">★ ${take.score}%</span>`;
+        }
+        assignHTML += `<span class="assignee-chip ${hasTake?'done':''}" title="${pName}${hasTake ? ' - take recorded' : ' - assigned'}" style="--chip-color:${pColor}"><span class="assignee-dot"></span>${pName}${scorePill}</span>`;
       });
     }
 
@@ -1476,6 +1802,19 @@ function handleRoomEvent(event){
     return;
   }
 
+  if(event.action === 'toggle-scoring'){
+    state.scoringMode = Boolean(event.scoringMode);
+    if(el('scoringToggle')) el('scoringToggle').checked = state.scoringMode;
+    if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
+    if(el('studioScoreModeBadge')) el('studioScoreModeBadge').style.display = state.scoringMode ? 'inline-flex' : 'none';
+    if(el('studioScreen')?.classList.contains('active')){
+      updateLaneScoreDisplay(state.fragments[state.currentIndex]);
+      renderFragmentList();
+      renderStudioPlayerList();
+    }
+    return;
+  }
+
   if(event.action === 'new-take'){
     (async () => {
       try {
@@ -1487,8 +1826,10 @@ function handleRoomEvent(event){
         state.takes[event.fragId][event.uid] = { buffer, trace: event.trace, score: event.score || 0 };
         renderFragmentList();
         renderMasterCanvas();
+        renderStudioPlayerList();
         if(state.fragments[state.currentIndex]?.id === event.fragId){
           drawWave(state.fragments[state.currentIndex]);
+          updateLaneScoreDisplay(state.fragments[state.currentIndex]);
           checkRecordAbility();
         }
       } catch(err) {
@@ -1766,10 +2107,12 @@ function resumePlayback(isRemote = false){
   if(!isRemote) sendPlaybackEvent({ action:'resume', fragmentId:pb.frag.id, position:Math.max(0, v.currentTime - pb.frag.start) });
 }
 
-el('pauseBtn').onclick = () => {
-  if(state.paused) resumePlayback();
-  else if(state.isPlaying) pausePlayback();
-};
+if (el('pauseBtn')) {
+  el('pauseBtn').onclick = () => {
+    if(state.paused) resumePlayback();
+    else if(state.isPlaying) pausePlayback();
+  };
+}
 
 function finishPlayback(isRemote = false){
   state.isPlaying = false; state.paused = false;
@@ -1799,14 +2142,27 @@ function finishPlayback(isRemote = false){
           const arr = await blob.arrayBuffer();
           const ctx = ensureCtx();
           const buffer = await ctx.decodeAudioData(arr);
+
+          let takeScore = 0;
+          if (state.scoringMode) {
+            takeScore = computeWaveMatchScore(pb.frag, buffer, trace);
+          }
+
           if(!state.takes[fragId]) state.takes[fragId] = {};
-          state.takes[fragId][state.uid] = { buffer, trace, score: 0 };
+          state.takes[fragId][state.uid] = { buffer, trace, score: takeScore };
           renderFragmentList();
           renderMasterCanvas();
+          renderStudioPlayerList();
           if(state.fragments[state.currentIndex]?.id === fragId){
             drawWave(state.fragments[state.currentIndex]);
+            updateLaneScoreDisplay(state.fragments[state.currentIndex]);
           }
           checkRecordAbility();
+
+          if (state.scoringMode) {
+            const tierInfo = getScoreTier(takeScore);
+            showNotice(`★ Wave Match: ${takeScore}% (${tierInfo.label})`, tierInfo.toastType, 3600);
+          }
         } catch(decErr) {
           console.error("Local take decode error:", decErr);
           showNotice("Failed to decode your recorded audio take.", "error");
@@ -1820,6 +2176,7 @@ function finishPlayback(isRemote = false){
         reader.onloadend = async () => {
           try {
             const base64 = reader.result;
+            const currentScore = state.takes[fragId]?.[state.uid]?.score || 0;
 
             sendPlaybackEvent({
               action: 'new-take',
@@ -1827,7 +2184,7 @@ function finishPlayback(isRemote = false){
               uid: state.uid,
               audio: base64,
               trace,
-              score: 0
+              score: currentScore
             });
 
             const fb = await loadFirebase();
@@ -1839,7 +2196,7 @@ function finishPlayback(isRemote = false){
               uid: state.uid,
               audio: base64,
               trace,
-              score: 0
+              score: currentScore
             });
           } catch (err) {
             console.error("Multiplayer take upload error:", err);
@@ -1879,53 +2236,60 @@ function stopPlayback(isRemote = false){
   }
 }
 
-el('listenBtn').onclick = () => {
-  const f = state.fragments[state.currentIndex];
-  if(!f) return showNotice("No line selected.", "warning");
-  playFragment('original');
-};
+if (el('listenBtn')) {
+  el('listenBtn').onclick = () => {
+    const f = state.fragments[state.currentIndex];
+    if(!f) return showNotice("No line selected.", "warning");
+    playFragment('original');
+  };
+}
 
-el('recordBtn').onclick = async () => {
-  const f = state.fragments[state.currentIndex];
-  if(!f) return showNotice("No line selected to record.", "warning");
-  if(f.end - f.start < 0.2){
-    return showNotice("This line is too short to record (< 0.2s). Try merging it with an adjacent line.", "warning", 3000);
-  }
-  const assigned = Array.isArray(f.assigned) ? f.assigned : [];
-  if(!isSoloSession() && !assigned.includes(state.uid)){
-    if(assigned.length < 2){
-      f.assigned = [...assigned, state.uid];
-      renderAssignmentUI(f);
-      renderFragmentList();
-      checkRecordAbility();
-      sendPlaybackEvent({
-        action: 'update-assignments',
-        fragmentId: f.id,
-        assigned: f.assigned
-      });
-      const fb = await loadFirebase();
-      if(fb && state.roomId){
-        const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-        fb.updateDoc(roomRef, { fragments: state.fragments }).catch(() => {});
-      }
-    } else {
-      return showNotice("Max 2 players per line. Uncheck another player to assign yourself.");
+if (el('recordBtn')) {
+  el('recordBtn').onclick = async () => {
+    const f = state.fragments[state.currentIndex];
+    if(!f) return showNotice("No line selected to record.", "warning");
+    if(f.end - f.start < 0.2){
+      return showNotice("This line is too short to record (< 0.2s). Try merging it with an adjacent line.", "warning", 3000);
     }
-  }
-  playFragment('record');
-};
+    const assigned = Array.isArray(f.assigned) ? f.assigned : [];
+    if(!isSoloSession() && !assigned.includes(state.uid)){
+      if(assigned.length < 2){
+        f.assigned = [...assigned, state.uid];
+        renderAssignmentUI(f);
+        renderFragmentList();
+        checkRecordAbility();
+        sendPlaybackEvent({
+          action: 'update-assignments',
+          fragmentId: f.id,
+          assigned: f.assigned
+        });
+        const fb = await loadFirebase();
+        if(fb && state.roomId){
+          const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+          fb.updateDoc(roomRef, { fragments: state.fragments }).catch(() => {});
+        }
+      } else {
+        return showNotice("Max 2 players per line. Uncheck another player to assign yourself.");
+      }
+    }
+    playFragment('record');
+  };
+}
 
-el('reviewBtn').onclick = () => {
-  const f = state.fragments[state.currentIndex];
-  if(!f) return showNotice("No line selected.", "warning");
-  const takes = state.takes[f.id] || {};
-  if(Object.keys(takes).length === 0){
-    return showNotice("No takes recorded for this line yet. Hit Record to lay one down!", "info", 2400);
-  }
-  playFragment('review');
-};
+if (el('reviewBtn')) {
+  el('reviewBtn').onclick = () => {
+    const f = state.fragments[state.currentIndex];
+    if(!f) return showNotice("No line selected.", "warning");
+    const takes = state.takes[f.id] || {};
+    if(Object.keys(takes).length === 0){
+      return showNotice("No takes recorded for this line yet. Hit Record to lay one down!", "info", 2400);
+    }
+    playFragment('review');
+  };
+}
 
-el('renderBtn').onclick = async () => {
+if (el('renderBtn')) {
+  el('renderBtn').onclick = async () => {
   const v = el('mainVideo');
   if(!v.captureStream && !v.mozCaptureStream){
     return showNotice("Export is not supported in this browser (captureStream unavailable).", "error");
@@ -1946,7 +2310,12 @@ el('renderBtn').onclick = async () => {
     const ctx = ensureCtx();
     if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
     const dest = ctx.createMediaStreamDestination();
-    const vStream = v.captureStream ? v.captureStream() : v.mozCaptureStream();
+    const vStream = typeof v.captureStream === 'function'
+      ? v.captureStream()
+      : (typeof v.mozCaptureStream === 'function' ? v.mozCaptureStream() : null);
+    if (!vStream) {
+      throw new Error("Video stream capture is not supported in this browser.");
+    }
     const combined = new MediaStream([...vStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
     
     const mimeOpts = ['video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'].find(m => {
@@ -2029,17 +2398,31 @@ el('renderBtn').onclick = async () => {
   } catch(err) {
     console.error("Export render error:", err);
     showNotice("Failed to export dub: " + (err?.message || "Render error"), "error");
-    el('renderBtn').disabled = false;
-    el('renderProgress').classList.remove('show');
+    if (el('renderBtn')) el('renderBtn').disabled = false;
+    if (el('renderProgress')) el('renderProgress').classList.remove('show');
   }
-};
+  };
+}
 
-window.addEventListener('unhandledrejection', (event) => {
-  console.error("Unhandled promise rejection:", event.reason);
-  const reason = event.reason;
-  const msg = reason?.message || (typeof reason === 'string' ? reason : null);
-  if (msg && !msg.includes('interrupted by a call to pause()') && !msg.includes('play() request was interrupted') && !msg.includes('The play() request was aborted')) {
-    showNotice(msg.length > 95 ? msg.slice(0, 95) + '...' : msg, 'error');
-  }
-});
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error("Unhandled promise rejection:", event.reason);
+    const reason = event.reason;
+    const msg = reason?.message || (typeof reason === 'string' ? reason : null);
+    const name = reason?.name || '';
+    if (name === 'AbortError' || (msg && (
+      msg.includes('interrupted by a call to pause()') ||
+      msg.includes('play() request was interrupted') ||
+      msg.includes('The play() request was aborted') ||
+      msg.includes('AbortError') ||
+      msg.includes('WebSocket') ||
+      msg.includes('network error')
+    ))) {
+      return;
+    }
+    if (msg) {
+      showNotice(msg.length > 95 ? msg.slice(0, 95) + '...' : msg, 'error');
+    }
+  });
+}
 

@@ -12,11 +12,15 @@ export function createMultiplayerClient() {
   let reconnectTimer = null;
 
   function getWsUrl() {
+    if (typeof window === 'undefined' || !window.location) return 'ws://localhost:3000';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}`;
   }
 
   function connectSocket() {
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined') {
+      return Promise.resolve(null);
+    }
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
       return socketReadyPromise;
     }
@@ -119,14 +123,16 @@ export function createMultiplayerClient() {
   }
 
   function snapshot(data) {
-    if (Array.isArray(data)) {
-      return {
-        docChanges: () => data.map(item => ({ type: 'added', doc: { data: () => item } }))
-      };
-    }
+    const isArr = Array.isArray(data);
     return {
-      exists: () => data !== null && data !== undefined,
-      data: () => data
+      exists: () => data !== null && data !== undefined && (!isArr || data.length > 0),
+      data: () => (isArr ? data : data || null),
+      docChanges: () => (isArr ? data.map(item => ({ type: 'added', doc: { data: () => item } })) : []),
+      forEach: (cb) => {
+        if (isArr) {
+          data.forEach((item, i) => cb({ data: () => item, id: item?.id || String(i) }));
+        }
+      }
     };
   }
 
@@ -155,7 +161,10 @@ export function createMultiplayerClient() {
 
   const api = {
     async signInAnonymously() {
-      return { user: { uid: crypto.randomUUID() } };
+      const uid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : 'u_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      return { user: { uid } };
     },
     async signInWithCustomToken() {
       return api.signInAnonymously();
