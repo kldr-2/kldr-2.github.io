@@ -1,11 +1,16 @@
 
 import { createMultiplayerClient } from './network.js';
+import { initAsteroidsBackground, startAsteroids, stopAsteroids } from './asteroidsBackground.js';
 
 const appId = 'loop-booth-mp';
 const multiplayer = createMultiplayerClient();
 let auth = null;
 let db = multiplayer.db;
 let firebaseModules = null;
+
+if (typeof document !== 'undefined') {
+  initAsteroidsBackground('bgAsteroids');
+}
 
 async function loadFirebase(){
   if(firebaseModules) return firebaseModules;
@@ -295,8 +300,16 @@ if (typeof document !== 'undefined') {
 }
 
 function switchScreen(id){
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  el(id).classList.add('active');
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    if (el(id)) el(id).classList.add('active');
+  }
+
+  if (id === 'studioScreen') {
+    stopAsteroids();
+  } else {
+    startAsteroids();
+  }
 }
 
 function ensureCtx(){

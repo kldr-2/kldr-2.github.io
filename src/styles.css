@@ -60,14 +60,44 @@
     padding: 10px 14px; border-radius: var(--radius-small); font-family: inherit; font-size: 14px; width: 100%;
   }
 
-  /* Screens */
-  .screen { display: none; min-height: 100vh; flex-direction: column; }
+  /* Purple Asteroids Vector Background */
+  #bgAsteroids {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+    pointer-events: none;
+    display: block;
+    opacity: 1;
+    transition: opacity 0.4s ease;
+  }
+
+  /* Screens: z-index: 2 ensures real UI stays cleanly above asteroid field */
+  .screen {
+    display: none;
+    min-height: 100vh;
+    flex-direction: column;
+    position: relative;
+    z-index: 2;
+  }
   .screen.active { display: flex; }
-  .version-footer{ position:absolute; left:20px; bottom:20px; color:var(--text-faint); font-family:var(--font-mono); font-size:11px; letter-spacing:.04em; }
+  .version-footer{ position:absolute; left:20px; bottom:20px; color:var(--text-faint); font-family:var(--font-mono); font-size:11px; letter-spacing:.04em; z-index: 3; }
 
   /* Auth / Setup */
   #setupScreen { align-items: center; justify-content: center; padding: 20px; }
-  .setup-card { background: var(--bg-panel); border: 1px solid var(--line); padding: 30px; border-radius: var(--radius-panel); width: 100%; max-width: 400px; text-align: center; }
+  .setup-card {
+    background: rgba(30, 24, 18, 0.90);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--line);
+    padding: 30px;
+    border-radius: var(--radius-panel);
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.65), 0 0 35px -10px rgba(178, 133, 245, 0.12);
+  }
   .setup-card h1 { font-size: 24px; margin-bottom: 20px; }
   .setup-actions { display: flex; gap: 10px; margin-top: 20px; }
   .setup-actions .btn { flex: 1; justify-content: center; }
@@ -75,7 +105,17 @@
 
   /* Lobby */
   #lobbyScreen { align-items: center; justify-content: center; padding: 20px; text-align: center; }
-  .lobby-card { background: var(--bg-panel); border: 1px solid var(--line); padding: 30px; border-radius: var(--radius-panel); width: 100%; max-width: 500px; }
+  .lobby-card {
+    background: rgba(30, 24, 18, 0.90);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--line);
+    padding: 30px;
+    border-radius: var(--radius-panel);
+    width: 100%;
+    max-width: 500px;
+    box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.65), 0 0 35px -10px rgba(178, 133, 245, 0.12);
+  }
   .room-code { font-family: var(--font-mono); font-size: 32px; font-weight: 700; color: var(--accent); letter-spacing: 4px; margin: 10px 0 20px; }
   
   .player-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; text-align: left; }
