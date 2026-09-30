@@ -62,6 +62,11 @@ export function setAsteroidPlayerColors(colors = []) {
   reassignAsteroidColors();
 }
 
+export function updateThemeAccent() {
+  accentRgb = getAccentRgb();
+  reassignAsteroidColors();
+}
+
 function reassignAsteroidColors() {
   if (!asteroids || !asteroids.length) return;
   const base = getAccentRgb();
@@ -165,15 +170,17 @@ function drawAsteroid(a) {
   });
   bgCtx.closePath();
 
+  const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
   const color = a.currentRgb || accentRgb;
   const r = Math.round(color.r);
   const g = Math.round(color.g);
   const b = Math.round(color.b);
 
-  bgCtx.strokeStyle = `rgba(${r},${g},${b},${a.opacity})`;
-  bgCtx.lineWidth = 1.7;
-  bgCtx.shadowColor = `rgba(${r},${g},${b},0.65)`;
-  bgCtx.shadowBlur = 9;
+  const strokeAlpha = isLight ? Math.min(0.85, a.opacity * 1.3) : a.opacity;
+  bgCtx.strokeStyle = `rgba(${r},${g},${b},${strokeAlpha})`;
+  bgCtx.lineWidth = isLight ? 2.0 : 1.7;
+  bgCtx.shadowColor = isLight ? `rgba(${r},${g},${b},0.35)` : `rgba(${r},${g},${b},0.65)`;
+  bgCtx.shadowBlur = isLight ? 5 : 9;
   bgCtx.stroke();
   bgCtx.restore();
 }

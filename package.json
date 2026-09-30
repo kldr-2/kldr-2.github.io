@@ -1,7 +1,7 @@
 {
   "name": "loop-booth",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "main": "server.js",
   "type": "module",
   "scripts": {
