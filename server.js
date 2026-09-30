@@ -76,10 +76,10 @@ function updatePath(path, data) {
 
 const httpServer = createServer(async (request, response) => {
   const requestUrl = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
-  const videoMatch = requestUrl.pathname.match(/^\/api\/rooms\/([A-Z0-9]{5})\/video$/);
+  const videoMatch = requestUrl.pathname.match(/^\/api\/rooms\/([^/]+)\/video$/);
 
   if (videoMatch && request.method === 'POST') {
-    const roomId = videoMatch[1];
+    const roomId = decodeURIComponent(videoMatch[1]).toUpperCase();
     const chunks = [];
     let size = 0;
     for await (const chunk of request) {
@@ -105,7 +105,8 @@ const httpServer = createServer(async (request, response) => {
   }
 
   if (videoMatch && request.method === 'GET') {
-    const video = roomVideos.get(videoMatch[1]);
+    const roomId = decodeURIComponent(videoMatch[1]).toUpperCase();
+    const video = roomVideos.get(roomId);
     if (!video) {
       response.writeHead(404, { 'Content-Type': 'text/plain' });
       response.end('Room video not found');
@@ -182,16 +183,17 @@ wss.on('connection', socket => {
         return send(socket, { requestId, data: true });
       }
       if (op === 'room-event') {
+        const normalizedRoomId = String(roomId || '').toUpperCase();
         for (const [s, paths] of subscriptions) {
           if (s !== socket) {
             let matches = false;
             for (const p of paths) {
-              if (p.includes(roomId)) {
+              if (p.toUpperCase().includes(normalizedRoomId)) {
                 matches = true;
                 break;
               }
             }
-            if (matches) send(s, { type: 'room-event', roomId, event });
+            if (matches) send(s, { type: 'room-event', roomId: normalizedRoomId, event });
           }
         }
         return send(socket, { requestId, success: true });

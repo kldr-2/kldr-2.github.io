@@ -108,7 +108,10 @@
     display: inline-flex; align-items: center; gap: 6px;
     background: var(--bg-panel); border: 1px solid var(--line);
     padding: 3px 8px; border-radius: 999px; font-size: 12px; line-height: 1.2;
-    transition: all 0.2s ease;
+    transition: all 0.2s ease; cursor: pointer; user-select: none;
+  }
+  .studio-player-badge:hover {
+    border-color: var(--accent); background: rgba(178, 133, 245, 0.12); transform: translateY(-1px);
   }
   .studio-player-badge .p-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .studio-player-badge .p-name { font-weight: 500; color: var(--text); white-space: nowrap; font-size: 12px; }

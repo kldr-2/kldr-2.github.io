@@ -290,12 +290,12 @@ function listenToRoom(){
       
       // Update Lobby UI
       el('lobbyRoomCode').textContent = data.id;
-      renderLobbyPlayers(data.players, data.hostId);
+      renderLobbyPlayers(data.players || [], data.hostId);
 
       if(data.status === 'lobby'){
         if(state.isHost){
           el('lobbyHostUI').style.display = 'block';
-          const allReady = data.players.every(p => p.ready);
+          const allReady = (data.players || []).length > 0 && data.players.every(p => p.ready);
           el('startStudioBtn').disabled = !allReady || !data.videoName;
         } else {
           el('lobbyGuestUI').style.display = 'block';
@@ -314,14 +314,11 @@ function listenToRoom(){
         enterStudio();
       }
       
-      // If in studio, sync fragments, line sync, and player list
+      // If in studio, sync fragments and player list without overriding active line
       if(data.status === 'studio'){
         renderStudioPlayerList();
-        syncFragmentsFromDB(data.fragments);
-        if(!state.isHost && typeof data.activeLineIndex === 'number' && data.activeLineIndex !== state.currentIndex){
-          if(!state.pb || state.pb.mode !== 'record'){
-            selectFragment(data.activeLineIndex, false, true);
-          }
+        if(Array.isArray(data.fragments) && data.fragments.length > 0){
+          syncFragmentsFromDB(data.fragments);
         }
       }
     }, (err) => console.error("Room sync error", err));
@@ -350,10 +347,12 @@ async function syncHostVideo(roomData){
     state.videoSyncedName = roomData.videoName;
     state.me.ready = true;
     const fb = await loadFirebase();
-    if(!fb) return;
-    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-    const updatedPlayers = state.roomData.players.map(p => p.id === state.uid ? {...p, ready: true} : p);
-    state.roomData = { ...state.roomData, players: updatedPlayers };
+    if(fb){
+      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+      const updatedPlayers = (state.roomData?.players || []).map(p => p.id === state.uid ? {...p, ready: true, syncProgress: 100} : p);
+      state.roomData = { ...state.roomData, players: updatedPlayers };
+      await fb.updateDoc(roomRef, { players: updatedPlayers }).catch(() => {});
+    }
     await multiplayer.api.announcePlayer(state.roomId, state.me = { ...state.me, ready: true, syncProgress:100 });
   } catch(error) {
     console.error('Host video sync error:', error);
@@ -392,7 +391,12 @@ el('hostFileInput').onchange = async (e) => {
   const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
   
   // Set host ready
-  const updatedPlayers = state.roomData.players.map(p => p.id === state.uid ? {...p, ready: true} : p);
+  const currentPlayers = state.roomData?.players || (state.me ? [state.me] : []);
+  const updatedPlayers = currentPlayers.map(p => p.id === state.uid ? {...p, ready: true} : p);
+  if(!updatedPlayers.some(p => p.id === state.uid) && state.me){
+    updatedPlayers.push({ ...state.me, ready: true });
+  }
+  if(state.me) state.me.ready = true;
   
   await fb.updateDoc(roomRef, {
     videoName: file.name,
@@ -424,37 +428,22 @@ async function enterStudio(){
   el('undoBtn').style.display = state.isHost ? 'inline-flex' : 'none';
   el('assignPanel').style.display = state.isSingleplayer ? 'none' : 'flex';
   
-  // If guest enters studio and video file is not yet ready, fetch it now
-  if(!state.file && state.roomId && !state.isSingleplayer){
-    el('monitorLoading').style.display = 'flex';
-    el('monitorLoadingText').textContent = 'Downloading video from host...';
-    try {
-      state.file = await multiplayer.api.downloadVideo(state.roomId, (progress) => {
-        el('monitorLoadingText').textContent = `Downloading video from host... ${progress}%`;
-      });
-      state.videoSyncedName = state.roomData?.videoName || 'clip.mp4';
-      state.me.ready = true;
-    } catch(err) {
-      console.error('Failed to download video in enterStudio:', err);
-      showNotice('Could not load video from host. Please check connection.');
-    } finally {
-      el('monitorLoading').style.display = 'none';
-    }
-  }
-
   const video = el('mainVideo');
-  if(state.file){
-    if(state.videoURL) URL.revokeObjectURL(state.videoURL);
+
+  // Immediately ensure video element has a source so playback is never blocked
+  if (state.file) {
+    if (state.videoURL) URL.revokeObjectURL(state.videoURL);
     state.videoURL = URL.createObjectURL(state.file);
     video.src = state.videoURL;
-    video.load();
-    await new Promise(r => {
-      video.onloadedmetadata = () => r();
-      setTimeout(r, 1500);
-    });
-    state.duration = video.duration || (await forceDuration());
+  } else if (state.roomId && !state.isSingleplayer) {
+    // Direct stream fallback for instant playback and seek
+    video.src = `/api/rooms/${state.roomId}/video`;
   }
   
+  if (video.src) {
+    try { video.load(); } catch(e) {}
+  }
+
   // Pre-request microphone access so it doesn't interrupt the user's first take
   try {
     if(!state.micStream) {
@@ -464,39 +453,93 @@ async function enterStudio(){
     console.warn("Mic access not granted at startup. Will prompt again on record.");
   }
 
+  // If guest enters studio and video file is not yet locally downloaded, download it now for buffer extraction
+  if(!state.file && state.roomId && !state.isSingleplayer){
+    el('monitorLoading').style.display = 'flex';
+    el('monitorLoadingText').textContent = 'Syncing video...';
+    try {
+      state.file = await multiplayer.api.downloadVideo(state.roomId, (progress) => {
+        el('monitorLoadingText').textContent = `Syncing video... ${progress}%`;
+      });
+      state.videoSyncedName = state.roomData?.videoName || 'clip.mp4';
+      if(state.me) state.me.ready = true;
+      // Re-point video to local blob for best seek performance
+      if (state.file) {
+        if(state.videoURL) URL.revokeObjectURL(state.videoURL);
+        state.videoURL = URL.createObjectURL(state.file);
+        video.src = state.videoURL;
+        video.load();
+      }
+    } catch(err) {
+      console.warn('Background download completed via stream fallback:', err);
+    } finally {
+      el('monitorLoading').style.display = 'none';
+    }
+  }
+
+  // Wait for video metadata to have accurate duration
+  if (video.src) {
+    await new Promise(r => {
+      if (video.readyState >= 1) return r();
+      video.onloadedmetadata = () => r();
+      setTimeout(r, 1200);
+    });
+    state.duration = video.duration || (await forceDuration()) || 10;
+  }
+
+  // Extract master buffer & audio envelope for waveforms & vocals
   if(state.file){
     try {
       const ctx = ensureCtx();
       if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
       const arr = await state.file.arrayBuffer();
       state.masterBuffer = await ctx.decodeAudioData(arr.slice(0));
-      state.envelope = buildEnvelope(state.masterBuffer, 50); // High res envelope
+      state.envelope = buildEnvelope(state.masterBuffer, 50);
       state.backgroundBuffer = buildVocalReducedBuffer(state.masterBuffer);
       if(!state.backgroundBuffer){
         showNotice("This clip's audio is mono, so the original voice can't be separated from the background. The full original audio will play under any un-dubbed lines instead.");
       }
     } catch(e) {
-      showNotice("Failed to extract original audio. Waveforms won't display.");
+      console.warn("Waveform extraction notice:", e);
     }
   }
 
-  if(state.isHost && state.roomData.fragments.length === 0){
-    // Host auto-segments and pushes to DB
+  if(state.isHost && (!state.roomData?.fragments || state.roomData.fragments.length === 0)){
+    // Host auto-segments and distributes lines across players in room
     const initialFrags = autoSegment();
-    if (state.isSingleplayer) {
-      state.fragments = initialFrags;
-      renderMasterCanvas();
-      renderFragmentList();
-      if(state.fragments.length > 0) selectFragment(0, true);
-    } else {
+    const roomPlayers = state.roomData?.players || (state.me ? [state.me] : []);
+    if(!state.isSingleplayer && roomPlayers.length > 0){
+      initialFrags.forEach((f, idx) => {
+        const assignedPlayer = roomPlayers[idx % roomPlayers.length];
+        if(assignedPlayer && assignedPlayer.id){
+          f.assigned = [assignedPlayer.id];
+        }
+      });
+    }
+    state.fragments = initialFrags;
+    if(state.roomData) state.roomData.fragments = initialFrags;
+    renderMasterCanvas();
+    renderFragmentList();
+    if(state.fragments.length > 0) selectFragment(0, true);
+
+    if (!state.isSingleplayer) {
       const fb = await loadFirebase();
-      if(fb){
+      if(fb && state.roomId){
         const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-        await fb.updateDoc(roomRef, { fragments: initialFrags, activeLineIndex: 0 });
+        await fb.updateDoc(roomRef, { fragments: initialFrags });
+        sendPlaybackEvent({ action: 'sync-fragments', fragments: initialFrags });
       }
     }
-  } else if(!state.isHost && typeof state.roomData?.activeLineIndex === 'number'){
-    state.currentIndex = Math.min(state.roomData.activeLineIndex, Math.max(0, state.fragments.length - 1));
+  } else {
+    // If roomData already has fragments or guest joined
+    if(state.roomData?.fragments && state.roomData.fragments.length > 0){
+      state.fragments = [...state.roomData.fragments];
+      renderMasterCanvas();
+      renderFragmentList();
+      const myLineIdx = state.fragments.findIndex(f => Array.isArray(f.assigned) && f.assigned.includes(state.uid));
+      state.currentIndex = myLineIdx >= 0 ? myLineIdx : 0;
+      if(state.fragments.length > 0) selectFragment(state.currentIndex, true);
+    }
   }
 
   if (!state.isSingleplayer) {
@@ -504,7 +547,10 @@ async function enterStudio(){
   }
   requestAnimationFrame(() => {
     renderMasterCanvas();
-    if(state.fragments[state.currentIndex]) drawWave(state.fragments[state.currentIndex]);
+    renderFragmentList();
+    if(state.fragments[state.currentIndex]) {
+      drawWave(state.fragments[state.currentIndex]);
+    }
     checkRecordAbility();
   });
 }
@@ -575,7 +621,27 @@ function sliceMasterBuffer(start, end){
 }
 
 function autoSegment(){
-  if(!state.envelope) return [{ id: 'f0', start:0, end: state.duration, assigned: [] }];
+  const dur = (state.duration && isFinite(state.duration) && state.duration > 0)
+    ? state.duration
+    : (el('mainVideo')?.duration || 10);
+
+  if(!state.envelope){
+    // If envelope is not ready yet, create evenly spaced 3.5s lines across clip duration
+    const slices = [];
+    const step = 3.5;
+    for(let t=0; t<dur; t+=step){
+      const s = t, e = Math.min(dur, t+step);
+      if(e - s > 0.5) slices.push([s, e]);
+    }
+    if(slices.length === 0) slices.push([0, dur]);
+    return slices.map(([s,e], i) => ({
+      id: 'f_'+i+'_'+Math.random().toString(36).slice(2,6),
+      start: s,
+      end: e,
+      assigned: state.isSingleplayer ? [state.uid] : []
+    }));
+  }
+
   const { env, rate } = state.envelope;
   const opts = { minLen: 1.0, maxLen: 8.0, silence: 0.35, threshRatio: 0.08 };
   
@@ -595,7 +661,7 @@ function autoSegment(){
       }
     }
   }
-  cuts.push(state.duration);
+  cuts.push(dur);
   
   let segs = [];
   for(let i=0; i<cuts.length-1; i++){
@@ -615,13 +681,19 @@ function autoSegment(){
 }
 
 function syncFragmentsFromDB(dbFrags){
-  // Preserve local assignment UI state if possible, but DB is source of truth
+  if(!Array.isArray(dbFrags) || dbFrags.length === 0) return;
   state.fragments = dbFrags;
-  if(state.currentIndex >= state.fragments.length) state.currentIndex = Math.max(0, state.fragments.length - 1);
-  
+  if(state.currentIndex >= state.fragments.length){
+    state.currentIndex = Math.max(0, state.fragments.length - 1);
+  }
   renderMasterCanvas();
   renderFragmentList();
-  if(state.fragments.length > 0) selectFragment(state.currentIndex, true);
+  const f = state.fragments[state.currentIndex];
+  if(f){
+    renderAssignmentUI(f);
+    checkRecordAbility();
+    drawWave(f);
+  }
 }
 
 // Fetch all takes for this room
@@ -666,27 +738,35 @@ function listenToTakes(){
 // Assignment UI updates
 function renderAssignmentUI(frag){
   const container = el('assignOptsContainer');
+  if(!container) return;
   container.innerHTML = '';
-  
-  state.roomData.players.forEach(p => {
-    const isAssigned = frag.assigned.includes(p.id);
+  if(!frag) return;
+
+  const players = state.roomData?.players || (state.me ? [state.me] : []);
+  if(players.length === 0) return;
+
+  players.forEach(p => {
+    const isAssigned = Array.isArray(frag.assigned) && frag.assigned.includes(p.id);
     const label = document.createElement('label');
     label.className = 'assign-opt';
     label.innerHTML = `
       <input type="checkbox" value="${p.id}" ${isAssigned ? 'checked' : ''}>
-      <span style="color:${p.color}">${p.name}</span>
+      <span style="color:${p.color || '#B285F5'}">${p.name || 'Player'}</span>
     `;
     
     label.querySelector('input').onchange = async (e) => {
       const checked = e.target.checked;
-      let newAssigned = [...frag.assigned];
-      if(checked && !newAssigned.includes(p.id)) newAssigned.push(p.id);
-      if(!checked) newAssigned = newAssigned.filter(id => id !== p.id);
-      
-      if(newAssigned.length > 2){
-        e.target.checked = false;
-        return showNotice("Max 2 players per line.");
+      let newAssigned = Array.isArray(frag.assigned) ? [...frag.assigned] : [];
+      if(checked){
+        if(newAssigned.length >= 2){
+          e.target.checked = false;
+          return showNotice("Max 2 players per line. Uncheck another player to assign yourself.");
+        }
+        if(!newAssigned.includes(p.id)) newAssigned.push(p.id);
+      } else {
+        newAssigned = newAssigned.filter(id => id !== p.id);
       }
+      frag.assigned = newAssigned;
       
       // Update DB
       const updatedFrags = [...state.fragments];
@@ -697,13 +777,18 @@ function renderAssignmentUI(frag){
         renderAssignmentUI(state.fragments[state.currentIndex]);
         renderFragmentList();
         checkRecordAbility();
-        if (state.isSingleplayer) {
-          return;
+        if (!state.isSingleplayer && state.roomId) {
+          sendPlaybackEvent({
+            action: 'update-assignments',
+            fragmentId: frag.id,
+            assigned: newAssigned
+          });
+          const fb = await loadFirebase();
+          if(fb && state.roomId){
+            const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+            await fb.updateDoc(roomRef, { fragments: updatedFrags });
+          }
         }
-        const fb = await loadFirebase();
-        if(!fb) return;
-        const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-        await fb.updateDoc(roomRef, { fragments: updatedFrags });
       }
     };
     container.appendChild(label);
@@ -739,20 +824,34 @@ function renderStudioPlayerList(){
       badgeContent = `⏸ Paused`;
     } else {
       badgeClass = 'is-idle';
-      badgeContent = `Idle`;
+      const lineText = typeof act.fragIndex === 'number' ? `Line ${act.fragIndex + 1}` : 'Idle';
+      badgeContent = lineText;
     }
 
     const hostTag = isHost ? '<span class="role-tag">Host</span>' : '';
     const youTag = isMe ? '<span class="you-tag">(You)</span>' : '';
 
     return `
-      <div class="studio-player-badge ${badgeClass}" title="${p.name}: ${act.activity}">
-        <div class="p-dot" style="background:${p.color}"></div>
-        <span class="p-name">${p.name}${youTag}${hostTag}</span>
+      <div class="studio-player-badge ${badgeClass}" data-player-id="${p.id}" data-frag-index="${typeof act.fragIndex === 'number' ? act.fragIndex : ''}" title="Click to view ${p.name}'s active line">
+        <div class="p-dot" style="background:${p.color || '#B285F5'}"></div>
+        <span class="p-name">${p.name || 'Player'}${youTag}${hostTag}</span>
         <span class="p-state">${badgeContent}</span>
       </div>
     `;
   }).join('');
+
+  // Add click to jump to player's line
+  container.querySelectorAll('.studio-player-badge').forEach(b => {
+    b.onclick = () => {
+      const idxStr = b.getAttribute('data-frag-index');
+      if(idxStr !== '' && idxStr !== null){
+        const idx = parseInt(idxStr, 10);
+        if(!isNaN(idx) && idx >= 0 && idx < state.fragments.length){
+          selectFragment(idx);
+        }
+      }
+    };
+  });
 }
 
 function broadcastMyActivity(activity, fragId = null, fragIndex = state.currentIndex){
@@ -779,9 +878,14 @@ function broadcastMyActivity(activity, fragId = null, fragIndex = state.currentI
 
 function checkRecordAbility(){
   const f = state.fragments[state.currentIndex];
-  if(!f) return;
-  const iAmAssigned = state.isSingleplayer || f.assigned.includes(state.uid);
-  const canAssignMe = f.assigned.length < 2;
+  if(!f) {
+    el('recordBtn').disabled = true;
+    el('reviewBtn').disabled = true;
+    return;
+  }
+  const assigned = Array.isArray(f.assigned) ? f.assigned : [];
+  const iAmAssigned = state.isSingleplayer || assigned.includes(state.uid);
+  const canAssignMe = assigned.length < 2;
   const canRecord = iAmAssigned || canAssignMe;
   el('recordBtn').disabled = !canRecord;
   el('recordBtn').title = iAmAssigned
@@ -790,20 +894,34 @@ function checkRecordAbility(){
       ? "Record line (will assign you to this line)"
       : "Line already has 2 assigned players";
 
-  const takeCount = f.assigned.filter(id => state.takes[f.id] && state.takes[f.id][id]).length;
-  el('reviewBtn').disabled = takeCount === 0;
+  const anyTakes = Boolean(state.takes[f.id] && Object.keys(state.takes[f.id]).length > 0);
+  el('reviewBtn').disabled = !anyTakes;
 }
 
 function selectFragment(idx, skipRedraw = false, isRemote = false){
   stopPlayback(isRemote);
+  if(idx < 0 || idx >= state.fragments.length) return;
   state.currentIndex = idx;
   const f = state.fragments[idx];
   if(!f) return;
   
   el('fragLabel').textContent = idx + 1;
   el('fragTotal').textContent = state.fragments.length;
-  if(state.file && el('mainVideo').src && state.duration){
-    el('mainVideo').currentTime = f.start;
+  
+  const v = el('mainVideo');
+  if(v && Number.isFinite(f.start)){
+    if (!v.src || v.src === '' || v.src === window.location.href) {
+      if (state.file) {
+        if (state.videoURL) URL.revokeObjectURL(state.videoURL);
+        state.videoURL = URL.createObjectURL(state.file);
+        v.src = state.videoURL;
+      } else if (state.roomId && !state.isSingleplayer) {
+        v.src = `/api/rooms/${state.roomId}/video`;
+      }
+    }
+    try {
+      v.currentTime = f.start;
+    } catch(e) {}
   }
   
   renderAssignmentUI(f);
@@ -815,14 +933,8 @@ function selectFragment(idx, skipRedraw = false, isRemote = false){
   }
   drawWave(f);
 
-  // Broadcast host line selection so guests follow in lockstep
-  if(state.isHost && !isRemote && !state.isSingleplayer && state.roomId){
-    sendPlaybackEvent({ action: 'select-line', index: idx, fragmentId: f.id });
-    loadFirebase().then(fb => {
-      if(!fb) return;
-      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-      fb.updateDoc(roomRef, { activeLineIndex: idx, activeFragmentId: f.id }).catch(() => {});
-    });
+  if(!state.isSingleplayer && state.roomId && !isRemote){
+    broadcastMyActivity('idle', f.id, idx);
   }
 }
 
@@ -883,10 +995,17 @@ async function mergeWithNext(index) {
     renderFragmentList();
     selectFragment(state.currentIndex, true);
   } else {
+    state.fragments = newFrags;
+    state.currentIndex = Math.min(state.currentIndex, newFrags.length - 1);
+    renderMasterCanvas();
+    renderFragmentList();
+    selectFragment(state.currentIndex, true);
+    sendPlaybackEvent({ action: 'sync-fragments', fragments: newFrags, activeLineIndex: state.currentIndex });
     const fb = await loadFirebase();
-    if(!fb) return;
-    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-    await fb.updateDoc(roomRef, { fragments: newFrags });
+    if(fb){
+      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+      await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: state.currentIndex });
+    }
   }
 }
 
@@ -915,18 +1034,19 @@ el('masterCanvas').onclick = async (e) => {
       const newFrags = [...state.fragments];
       newFrags.splice(idx, 1, a, b);
       
-      if (state.isSingleplayer) {
-        state.fragments = newFrags;
-        renderMasterCanvas();
-        renderFragmentList();
-        selectFragment(idx, true);
-        return;
-      }
+      state.fragments = newFrags;
+      renderMasterCanvas();
+      renderFragmentList();
+      selectFragment(idx, true);
       
-      const fb = await loadFirebase();
-      if(!fb) return;
-      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-      await fb.updateDoc(roomRef, { fragments: newFrags });
+      if (!state.isSingleplayer && state.roomId) {
+        sendPlaybackEvent({ action: 'sync-fragments', fragments: newFrags, activeLineIndex: idx });
+        const fb = await loadFirebase();
+        if(fb){
+          const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+          await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: idx });
+        }
+      }
     }
   } else {
     const idx = state.fragments.findIndex(f => t >= f.start && t <= f.end);
@@ -981,7 +1101,7 @@ function drawWave(frag, progress = 0){
   if(state.pb && state.pb.mode === 'record'){
     // Live trace (in CSS pixels, same units as w, so it lines up under any dpr)
     ctx.beginPath();
-    ctx.strokeStyle = state.me.color; ctx.lineWidth = 1.4;
+    ctx.strokeStyle = state.me?.color || '#B285F5'; ctx.lineWidth = 1.4;
     for(let x=0; x<state.liveTrace.length; x++){
       const amp = (state.liveTrace[x] || 0) * (h*0.42);
       ctx.moveTo(x, mid - amp); ctx.lineTo(x, mid + amp);
@@ -990,9 +1110,11 @@ function drawWave(frag, progress = 0){
   } else {
     // Saved takes
     const takes = state.takes[frag.id] || {};
-    frag.assigned.forEach(uid => {
+    const roomPlayers = state.roomData?.players || (state.me ? [state.me] : []);
+    const assignedUids = Array.isArray(frag.assigned) ? frag.assigned : [];
+    assignedUids.forEach(uid => {
       if(takes[uid] && takes[uid].trace){
-        const pColor = state.roomData.players.find(p => p.id === uid)?.color || '#fff';
+        const pColor = roomPlayers.find(p => p.id === uid)?.color || '#B285F5';
         ctx.beginPath();
         ctx.strokeStyle = pColor; ctx.lineWidth = 1.4;
         for(let x=0; x<takes[uid].trace.length; x++){
@@ -1037,19 +1159,25 @@ function renderMasterCanvas(){
 
 function renderFragmentList(){
   const list = el('fragmentList');
+  if(!list) return;
   list.innerHTML = '';
+  const roomPlayers = state.roomData?.players || (state.me ? [state.me] : []);
+
   state.fragments.forEach((f, i) => {
     const row = document.createElement('div');
     row.className = 'frag-row' + (i === state.currentIndex ? ' active' : '');
     
     let assignHTML = '';
-    if(f.assigned.length === 0){
+    const assignedList = Array.isArray(f.assigned) ? f.assigned : [];
+    if(assignedList.length === 0){
       assignHTML = '<span style="font-size:10px; color:var(--text-faint);">Unassigned</span>';
     } else {
-      f.assigned.forEach(uid => {
-        const p = state.roomData.players.find(x => x.id === uid);
+      assignedList.forEach(uid => {
+        const p = roomPlayers.find(x => x.id === uid);
         const hasTake = state.takes[f.id] && state.takes[f.id][uid];
-        if(p) assignHTML += `<span class="assignee-chip ${hasTake?'done':''}" title="${p.name}${hasTake ? ' - take recorded' : ' - assigned'}" style="--chip-color:${p.color}"><span class="assignee-dot"></span>${p.name}</span>`;
+        const pName = p ? p.name : (uid === state.uid ? (state.me?.name || 'You') : 'Player');
+        const pColor = p ? p.color : '#B285F5';
+        assignHTML += `<span class="assignee-chip ${hasTake?'done':''}" title="${pName}${hasTake ? ' - take recorded' : ' - assigned'}" style="--chip-color:${pColor}"><span class="assignee-dot"></span>${pName}</span>`;
       });
     }
 
@@ -1058,7 +1186,7 @@ function renderFragmentList(){
       ([uid, act]) => act.activity === 'recording' && (act.fragId === f.id || act.fragIndex === i)
     );
     if(activeRecorder){
-      const recPlayer = state.roomData?.players?.find(x => x.id === activeRecorder[0]);
+      const recPlayer = roomPlayers.find(x => x.id === activeRecorder[0]);
       const recName = recPlayer ? recPlayer.name : activeRecorder[1].playerName || 'Player';
       liveRecHTML = `<div class="frag-live-recording"><span class="dot"></span>${recName} recording</div>`;
     }
@@ -1127,75 +1255,81 @@ function handleRoomEvent(event){
     return;
   }
 
+  if(event.action === 'sync-fragments'){
+    if(Array.isArray(event.fragments) && event.fragments.length > 0){
+      syncFragmentsFromDB(event.fragments);
+    }
+    return;
+  }
+
+  if(event.action === 'update-assignments'){
+    const frag = state.fragments.find(f => f.id === event.fragmentId);
+    if(frag){
+      frag.assigned = event.assigned || [];
+      renderFragmentList();
+      renderMasterCanvas();
+      if(state.fragments[state.currentIndex]?.id === event.fragmentId){
+        renderAssignmentUI(frag);
+        checkRecordAbility();
+      }
+    }
+    return;
+  }
+
+  if(event.action === 'new-take'){
+    (async () => {
+      try {
+        const res = await fetch(event.audio);
+        const arr = await res.arrayBuffer();
+        const ctx = ensureCtx();
+        const buffer = await ctx.decodeAudioData(arr);
+        if(!state.takes[event.fragId]) state.takes[event.fragId] = {};
+        state.takes[event.fragId][event.uid] = { buffer, trace: event.trace, score: event.score || 0 };
+        renderFragmentList();
+        renderMasterCanvas();
+        if(state.fragments[state.currentIndex]?.id === event.fragId){
+          drawWave(state.fragments[state.currentIndex]);
+          checkRecordAbility();
+        }
+      } catch(err) {
+        console.error("Failed to decode instant remote take:", err);
+      }
+    })();
+    return;
+  }
+
   if(event.action === 'start'){
     const index = state.fragments.findIndex(fragment => fragment.id === event.fragmentId);
-    if(index < 0) return;
-    selectFragment(index, true, true);
-    const remoteMode = 'original';
-    const label = event.mode === 'record'
-      ? `${event.playerName || 'Player'} recording`
-      : event.mode === 'review'
-        ? `${event.playerName || 'Player'} playing takes`
-        : 'Synced playback';
-
     state.playerActivities[event.originUid] = {
       activity: event.mode === 'record' ? 'recording' : event.mode === 'review' ? 'reviewing' : 'listening',
       fragId: event.fragmentId,
-      fragIndex: index,
+      fragIndex: index >= 0 ? index : 0,
       playerName: event.playerName,
       updatedAt: Date.now()
     };
     renderStudioPlayerList();
     renderFragmentList();
-
-    playFragment(remoteMode, true, label, event.position || 0, event.sentAt);
     return;
   }
 
-  if(event.action === 'sync'){
-    const pb = state.pb;
-    if(!pb || pb.frag.id !== event.fragmentId || !state.isPlaying) return;
-    const target = pb.frag.start + (event.position || 0) + Math.max(0, (Date.now() - (event.sentAt || Date.now())) / 1000);
-    const drift = target - el('mainVideo').currentTime;
-    if(Math.abs(drift) > 0.35) el('mainVideo').currentTime = target;
-    else el('mainVideo').playbackRate = Math.max(0.96, Math.min(1.04, 1 + drift * 0.08));
-    return;
-  }
-
-  if(event.action === 'pause'){
+  if(event.action === 'stop' || event.action === 'pause'){
     if(event.originUid && state.playerActivities[event.originUid]){
-      state.playerActivities[event.originUid].activity = 'paused';
-      renderStudioPlayerList();
-    }
-    pausePlayback(true);
-    return;
-  }
-
-  if(event.action === 'resume'){
-    if(event.originUid && state.playerActivities[event.originUid]){
-      state.playerActivities[event.originUid].activity = 'reviewing';
-      renderStudioPlayerList();
-    }
-    resumePlayback(true);
-    return;
-  }
-
-  if(event.action === 'stop'){
-    if(event.originUid && state.playerActivities[event.originUid]){
-      state.playerActivities[event.originUid].activity = 'idle';
+      state.playerActivities[event.originUid].activity = event.action === 'pause' ? 'paused' : 'idle';
       renderStudioPlayerList();
       renderFragmentList();
     }
-    finishPlayback(true);
+    return;
   }
 }
 
 function startReviewSources(pb, offsetSeconds){
   const ctx = ensureCtx();
+  if(ctx.state === 'suspended') ctx.resume().catch(() => {});
   const takes = state.takes[pb.frag.id] || {};
   pb.sources = [];
-  pb.frag.assigned.forEach(uid => {
-    if(takes[uid]){
+  const allTakeUids = new Set([...(pb.frag.assigned || []), ...Object.keys(takes)]);
+  allTakeUids.forEach(uid => {
+    if(takes[uid] && takes[uid].buffer){
       const src = ctx.createBufferSource();
       src.buffer = takes[uid].buffer;
       src.connect(ctx.destination);
@@ -1213,7 +1347,19 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
   const f = state.fragments[state.currentIndex];
   if(!f) return;
   const ctx = ensureCtx();
+  if(ctx.state === 'suspended') ctx.resume().catch(() => {});
   const v = el('mainVideo');
+  
+  if (!v.src || v.src === '' || v.src === window.location.href) {
+    if (state.file) {
+      if (state.videoURL) URL.revokeObjectURL(state.videoURL);
+      state.videoURL = URL.createObjectURL(state.file);
+      v.src = state.videoURL;
+    } else if (state.roomId && !state.isSingleplayer) {
+      v.src = `/api/rooms/${state.roomId}/video`;
+    }
+    try { v.load(); } catch(e) {}
+  }
   
   if(mode === 'record'){
     try{
@@ -1228,40 +1374,59 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
   v.muted = isRemote || mode === 'record';
   v.volume = isRemote || mode === 'record' ? 0 : mixVol;
   v.playbackRate = 1;
-  v.currentTime = f.start;
+  try {
+    v.currentTime = f.start;
+  } catch(e) {}
   
-  // Wait for seek
+  // Wait briefly for seek to settle if needed
   await new Promise(r => {
-    if(Math.abs(v.currentTime - f.start) < 0.05) r();
-    else { v.onseeked = () => { v.onseeked=null; r(); }; setTimeout(r, 300); }
+    if(Math.abs((v.currentTime || 0) - f.start) < 0.05) return r();
+    let settled = false;
+    const onSeek = () => { if(!settled){ settled = true; v.removeEventListener('seeked', onSeek); r(); } };
+    v.addEventListener('seeked', onSeek);
+    setTimeout(onSeek, 200);
   });
   if(isRemote && startPosition > 0){
-    v.currentTime = Math.min(f.end - 0.01, f.start + startPosition + Math.max(0, (Date.now() - sentAt) / 1000));
+    try {
+      v.currentTime = Math.min(f.end - 0.01, f.start + startPosition + Math.max(0, (Date.now() - sentAt) / 1000));
+    } catch(e) {}
   }
 
-  state.pb = { mode, frag: f, sources: [], recorder: null, chunks: [], analyser: null, sourcesOffsetAtStart: 0, remote: isRemote };
+  const pb = {
+    mode,
+    frag: f,
+    sources: [],
+    recorder: null,
+    chunks: [],
+    analyser: null,
+    sourcesOffsetAtStart: 0,
+    remote: isRemote,
+    startedAt: performance.now(),
+    hasPlayed: false,
+    duration: Math.max(0.1, f.end - f.start)
+  };
+  state.pb = pb;
   
   if(mode === 'record'){
     const micSrc = ctx.createMediaStreamSource(state.micStream);
-    state.pb.analyser = ctx.createAnalyser();
-    state.pb.analyser.fftSize = 1024;
-    micSrc.connect(state.pb.analyser);
+    pb.analyser = ctx.createAnalyser();
+    pb.analyser.fftSize = 1024;
+    micSrc.connect(pb.analyser);
     
     const mimeOpts = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(m => {
       try { return MediaRecorder.isTypeSupported(m); } catch(e){ return false; }
     });
-    state.pb.recorder = new MediaRecorder(state.micStream, mimeOpts ? {mimeType: mimeOpts} : undefined);
+    pb.recorder = new MediaRecorder(state.micStream, mimeOpts ? {mimeType: mimeOpts} : undefined);
     
-    const recording = state.pb;
-    state.pb.recorder.ondataavailable = e => { if(e.data.size) recording.chunks.push(e.data); };
+    pb.recorder.ondataavailable = e => { if(e.data.size) pb.chunks.push(e.data); };
     const waveWidth = Math.round(el('waveCanvas').getBoundingClientRect().width) || 300;
     state.liveTrace = new Array(waveWidth).fill(0);
-    state.pb.recorder.start();
+    pb.recorder.start();
     el('monitorBadgeText').textContent = "Recording"; el('monitorBadge').classList.add('live');
     el('recordBtn').classList.add('is-armed');
     if(!isRemote) broadcastMyActivity('recording', f.id, state.currentIndex);
   } else if (mode === 'review'){
-    startReviewSources(state.pb, 0);
+    startReviewSources(pb, 0);
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
     if(!isRemote) broadcastMyActivity('reviewing', f.id, state.currentIndex);
   } else {
@@ -1270,23 +1435,24 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
     if(!isRemote) broadcastMyActivity('listening', f.id, state.currentIndex);
   }
 
-  if(!isRemote){
-    sendPlaybackEvent({ action:'start', mode, fragmentId:f.id, position:0 });
-    const playback = state.pb;
-    playback.syncTimer = setInterval(() => {
-      if(state.pb === playback && state.isPlaying){
-        sendPlaybackEvent({ action:'sync', fragmentId:f.id, position:Math.max(0, v.currentTime - f.start) });
-      }
-    }, 500);
-  }
   state.isPlaying = true; state.paused = false;
   setPauseButton('playing');
+
+  const onPlaying = () => {
+    if(state.pb === pb) pb.hasPlayed = true;
+    v.removeEventListener('playing', onPlaying);
+  };
+  v.addEventListener('playing', onPlaying);
+
   const playPromise = v.play();
-  playPromise?.catch(error => {
-    // If audio autoplay was blocked on Safari/MacBook, mute video track and retry
+  playPromise?.then(() => {
+    if(state.pb === pb) pb.hasPlayed = true;
+  }).catch(error => {
     if (!v.muted) {
       v.muted = true;
-      v.play().catch(e => console.warn('Muted playback also blocked:', e));
+      v.play().then(() => {
+        if(state.pb === pb) pb.hasPlayed = true;
+      }).catch(e => console.warn('Muted playback also blocked:', e));
     } else {
       console.warn('Playback could not start:', error);
     }
@@ -1314,7 +1480,13 @@ function runLoop(){
     
     drawWave(f, progress);
     
-    if(v.currentTime >= f.end - 0.05 || v.ended){
+    const elapsed = (performance.now() - pb.startedAt) / 1000;
+    const hasStarted = pb.hasPlayed || elapsed > 0.25;
+    const reachedEndByClock = hasStarted && (v.currentTime >= f.end - 0.04) && (v.currentTime >= f.start + 0.08);
+    const reachedEndByEnded = hasStarted && v.ended && (v.currentTime >= f.start + 0.08);
+    const reachedEndByWallClock = elapsed >= dur + 0.05;
+
+    if(reachedEndByClock || reachedEndByEnded || reachedEndByWallClock){
       finishPlayback(pb.remote);
     } else {
       state.rafId = requestAnimationFrame(loop);
@@ -1400,25 +1572,41 @@ function finishPlayback(isRemote = false){
         const blob = new Blob(pb.chunks, { type: mimeType });
         if(blob.size < 50) return; // Ignore empty or invalid tiny recordings
 
+        try {
+          // Decode locally immediately for instant feedback
+          const arr = await blob.arrayBuffer();
+          const ctx = ensureCtx();
+          const buffer = await ctx.decodeAudioData(arr);
+          if(!state.takes[fragId]) state.takes[fragId] = {};
+          state.takes[fragId][state.uid] = { buffer, trace, score: 0 };
+          renderFragmentList();
+          renderMasterCanvas();
+          if(state.fragments[state.currentIndex]?.id === fragId){
+            drawWave(state.fragments[state.currentIndex]);
+          }
+          checkRecordAbility();
+        } catch(decErr) {
+          console.error("Local take decode error:", decErr);
+        }
+
+        if (state.isSingleplayer) return;
+
+        // In multiplayer, send take to peers immediately & save to room storage
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
           try {
             const base64 = reader.result;
-            
-            if (state.isSingleplayer) {
-              const arr = await blob.arrayBuffer();
-              const ctx = ensureCtx();
-              const buffer = await ctx.decodeAudioData(arr);
-              if(!state.takes[fragId]) state.takes[fragId] = {};
-              state.takes[fragId][state.uid] = { buffer, trace: trace, score: 0 };
-              renderFragmentList();
-              renderMasterCanvas();
-              drawWave(state.fragments[state.currentIndex]);
-              checkRecordAbility();
-              return;
-            }
-            
+
+            sendPlaybackEvent({
+              action: 'new-take',
+              fragId,
+              uid: state.uid,
+              audio: base64,
+              trace,
+              score: 0
+            });
+
             const fb = await loadFirebase();
             if(!fb) return;
             const takeRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'takes_' + state.roomId, `take_${fragId}_${state.uid}`);
@@ -1427,12 +1615,11 @@ function finishPlayback(isRemote = false){
               fragId,
               uid: state.uid,
               audio: base64,
-              trace: trace,
+              trace,
               score: 0
             });
           } catch (err) {
-            console.error("Decode error:", err);
-            showNotice("Failed to process that take. Please try recording again.");
+            console.error("Multiplayer take upload error:", err);
           }
         };
       };
@@ -1440,7 +1627,7 @@ function finishPlayback(isRemote = false){
     }
   }
   state.pb = null;
-  drawWave(state.fragments[state.currentIndex]);
+  if(state.fragments[state.currentIndex]) drawWave(state.fragments[state.currentIndex]);
   if(!isRemote) sendPlaybackEvent({ action:'stop' });
 }
 
@@ -1472,14 +1659,20 @@ el('listenBtn').onclick = () => playFragment('original');
 el('recordBtn').onclick = async () => {
   const f = state.fragments[state.currentIndex];
   if(!f) return;
-  if(!state.isSingleplayer && !f.assigned.includes(state.uid)){
-    if(f.assigned.length < 2){
-      f.assigned.push(state.uid);
+  const assigned = Array.isArray(f.assigned) ? f.assigned : [];
+  if(!state.isSingleplayer && !assigned.includes(state.uid)){
+    if(assigned.length < 2){
+      f.assigned = [...assigned, state.uid];
       renderAssignmentUI(f);
       renderFragmentList();
       checkRecordAbility();
+      sendPlaybackEvent({
+        action: 'update-assignments',
+        fragmentId: f.id,
+        assigned: f.assigned
+      });
       const fb = await loadFirebase();
-      if(fb){
+      if(fb && state.roomId){
         const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
         fb.updateDoc(roomRef, { fragments: state.fragments }).catch(() => {});
       }
