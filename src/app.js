@@ -1,6 +1,6 @@
 
 import { createMultiplayerClient } from './network.js';
-import { initAsteroidsBackground, startAsteroids, stopAsteroids, setAsteroidPlayerColors, updateThemeAccent } from './asteroidsBackground.js';
+import { initAsteroidsBackground, startAsteroids, stopAsteroids } from './asteroidsBackground.js';
 
 const appId = 'loop-booth-mp';
 const multiplayer = createMultiplayerClient();
@@ -36,7 +36,6 @@ const state = {
   envelope: null,
   masterBuffer: null,
   backgroundBuffer: null, // vocal-reduced version of masterBuffer, for the continuous background bed
-  backgroundVolume: 0.65,
   
   // Studio state
   fragments: [],  // synced from roomData.fragments
@@ -171,129 +170,11 @@ if (typeof document !== 'undefined') {
     }
   };
 
-  const SUN_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>`;
-  const MOON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>`;
-
-  function updateThemeButtons(theme) {
-    const isLight = theme === 'light';
-    const label = isLight ? "Switch to Dark Mode" : "Switch to Light Mode";
-    const icon = isLight ? MOON_SVG : SUN_SVG;
-    ['themeToggleBtn', 'lobbyThemeToggleBtn', 'studioThemeToggleBtn'].forEach(id => {
-      const btn = el(id);
-      if (btn) {
-        btn.innerHTML = icon;
-        btn.setAttribute('aria-label', label);
-        btn.setAttribute('title', label);
-      }
-    });
-  }
-
-  function applyTheme(theme) {
-    if (theme === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    try {
-      localStorage.setItem('loop-booth-theme', theme);
-    } catch (_) {}
-    updateThemeButtons(theme);
-    updateThemeAccent();
-    if (state.fragments && state.fragments[state.currentIndex]) {
-      drawWave(state.fragments[state.currentIndex]);
-    }
-    renderMasterCanvas();
-  }
-
-  function toggleTheme() {
-    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    applyTheme(isLight ? 'dark' : 'light');
-  }
-
-  function initTheme() {
-    let theme = 'dark';
-    try {
-      const stored = localStorage.getItem('loop-booth-theme');
-      if (stored === 'light' || stored === 'dark') theme = stored;
-    } catch (_) {}
-    applyTheme(theme);
-  }
-
-  if (typeof document !== 'undefined') {
-    initTheme();
-    ['themeToggleBtn', 'lobbyThemeToggleBtn', 'studioThemeToggleBtn'].forEach(id => {
-      const btn = el(id);
-      if (btn) {
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          toggleTheme();
-        };
-      }
-    });
-  }
-
   if (typeof window !== 'undefined') {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && el('confirmModal')?.classList.contains('active')) {
         el('confirmModal').classList.remove('active');
         confirmCallback = null;
-        return;
-      }
-
-      // Studio shortcuts active only when studio is the current screen
-      const studioActive = el('studioScreen')?.classList.contains('active');
-      if (!studioActive) return;
-
-      // Don't hijack keys if user is typing in an input or textarea
-      const target = e.target;
-      const activeEl = document.activeElement;
-      const isInput = (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) ||
-                      (activeEl && ['INPUT', 'TEXTAREA'].includes(activeEl.tagName)) ||
-                      (target && target.isContentEditable) ||
-                      (activeEl && activeEl.isContentEditable);
-      if (isInput) return;
-
-      // Spacebar: Play / Pause toggle
-      if (e.code === 'Space' || e.key === ' ') {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (state.isPlaying) {
-          pausePlayback();
-          return;
-        }
-        if (state.paused) {
-          resumePlayback();
-          return;
-        }
-        // Idle: play takes if any exist, otherwise listen original
-        const f = state.fragments[state.currentIndex];
-        if (!f) return;
-        const takes = state.takes[f.id] || {};
-        if (Object.keys(takes).length > 0) {
-          playFragment('review');
-        } else {
-          playFragment('original');
-        }
-        return;
-      }
-
-      // R key: Record take toggle
-      if (e.key === 'r' || e.key === 'R') {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (state.pb && state.pb.mode === 'record') {
-          finishPlayback();
-          return;
-        }
-        const recBtn = el('recordBtn');
-        if (recBtn && !recBtn.disabled) {
-          recBtn.click();
-        } else if (recBtn && recBtn.disabled) {
-          showNotice("Assign yourself to this line first to record.", "warning", 2400);
-        }
-        return;
       }
     });
   }
@@ -333,61 +214,10 @@ if (typeof document !== 'undefined') {
       }
     };
   }
-
-  const mixSlider = el('mixSlider');
-  if (mixSlider) {
-    mixSlider.oninput = () => updateMixSliderDisplay();
-    mixSlider.onchange = () => updateMixSliderDisplay();
-    updateMixSliderDisplay();
-  }
 }
 
 function isSoloSession() {
   return Boolean(state.isSingleplayer || !state.roomId || state.roomId === 'LOCAL');
-}
-
-function setDropzoneState(status, details = {}) {
-  const dropzone = el('hostDropzone');
-  const idle = el('dropzoneIdle');
-  const loading = el('dropzoneLoading');
-  const ready = el('dropzoneReady');
-  if (!dropzone) return;
-
-  dropzone.classList.remove('is-uploading', 'is-ready');
-
-  if (status === 'idle') {
-    if (idle) idle.style.display = 'flex';
-    if (loading) loading.style.display = 'none';
-    if (ready) ready.style.display = 'none';
-  } else if (status === 'loading') {
-    dropzone.classList.add('is-uploading');
-    if (idle) idle.style.display = 'none';
-    if (loading) loading.style.display = 'flex';
-    if (ready) ready.style.display = 'none';
-
-    if (details.title && el('dropzoneLoadingTitle')) {
-      el('dropzoneLoadingTitle').textContent = details.title;
-    }
-    const pct = Math.min(100, Math.max(0, details.progress || 0));
-    if (el('hostUploadProgressFill')) {
-      el('hostUploadProgressFill').style.width = `${pct}%`;
-    }
-    if (el('dropzoneLoadingSub')) {
-      el('dropzoneLoadingSub').textContent = details.subtitle || `${pct}%`;
-    }
-  } else if (status === 'ready') {
-    dropzone.classList.add('is-ready');
-    if (idle) idle.style.display = 'none';
-    if (loading) loading.style.display = 'none';
-    if (ready) ready.style.display = 'flex';
-
-    if (el('dropzoneReadyName')) {
-      el('dropzoneReadyName').textContent = details.name || 'video.mp4';
-    }
-    if (el('dropzoneReadyMeta')) {
-      el('dropzoneReadyMeta').textContent = details.meta || 'Ready for studio • Click to replace';
-    }
-  }
 }
 
 function resetToMenu() {
@@ -429,7 +259,7 @@ function resetToMenu() {
   if (el('lobbyGuestUI')) el('lobbyGuestUI').style.display = 'none';
   if (el('startStudioBtn')) el('startStudioBtn').disabled = true;
   if (el('hostFileInput')) el('hostFileInput').value = '';
-  setDropzoneState('idle');
+  if (el('hostDropzone')) el('hostDropzone').textContent = 'Click or drop a video file here';
   if (el('scoringToggle')) {
     el('scoringToggle').checked = false;
     el('scoringToggle').disabled = false;
@@ -442,7 +272,6 @@ function resetToMenu() {
     el('laneScoreBadge').className = 'lane-score-badge';
   }
   
-  setAsteroidPlayerColors([PLAYER_COLORS[0]]);
   switchScreen('setupScreen');
 }
 
@@ -476,7 +305,11 @@ function switchScreen(id){
     if (el(id)) el(id).classList.add('active');
   }
 
-  startAsteroids();
+  if (id === 'studioScreen') {
+    stopAsteroids();
+  } else {
+    startAsteroids();
+  }
 }
 
 function ensureCtx(){
@@ -507,19 +340,6 @@ async function authenticate(){
 }
 
 function renderLobbyPlayers(players, hostId){
-  if (Array.isArray(players) && players.length > 0) {
-    const colors = players.map(p => p?.color).filter(Boolean);
-    setAsteroidPlayerColors(colors);
-  }
-  if (!Array.isArray(players) || players.length === 0) {
-    el('lobbyPlayerList').innerHTML = `
-      <div style="display:flex; align-items:center; justify-content:center; gap:8px; padding:16px; color:var(--text-dim); font-size:13px;">
-        <div class="monitor-spinner" style="width:16px; height:16px; border-width:2px;"></div>
-        <span>Waiting for players to join...</span>
-      </div>
-    `;
-    return;
-  }
   el('lobbyPlayerList').innerHTML = players.map(player => {
     const progress = Number.isFinite(player.syncProgress) ? player.syncProgress : 0;
     const isSyncing = !player.ready && progress > 0;
@@ -545,7 +365,6 @@ if (el('singleplayerBtn')) {
     state.isHost = true;
     state.roomId = 'LOCAL';
     state.me = { id: state.uid, name: 'You', color: PLAYER_COLORS[0], ready: true };
-    setAsteroidPlayerColors([PLAYER_COLORS[0]]);
     state.roomData = {
       id: 'LOCAL',
       hostId: state.uid,
@@ -573,8 +392,6 @@ if (el('singleplayerBtn')) {
     if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
 
     el('lobbyHostUI').style.display = 'block';
-    el('lobbyGuestUI').style.display = 'none';
-    setDropzoneState('idle');
     el('startStudioBtn').disabled = true; // wait for file
     switchScreen('lobbyScreen');
   };
@@ -583,15 +400,6 @@ if (el('singleplayerBtn')) {
 if (el('createRoomBtn')) {
   el('createRoomBtn').onclick = async () => {
     const name = el('playerNameInput')?.value.trim() || 'Host';
-    const loader = el('setupLoader');
-    const loaderText = el('setupLoaderText');
-    if (loader) {
-      loader.style.display = 'flex';
-      if (loaderText) loaderText.textContent = 'Creating room & connecting...';
-    }
-    if (el('createRoomBtn')) el('createRoomBtn').disabled = true;
-    if (el('joinRoomBtn')) el('joinRoomBtn').disabled = true;
-
     try {
       const ok = await authenticate();
       if(!ok) return showNotice("Could not connect to authentication service.", "error");
@@ -621,12 +429,6 @@ if (el('createRoomBtn')) {
       if(el('scoringHostNote')) el('scoringHostNote').style.display = 'none';
       if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
 
-      el('lobbyRoomCode').textContent = roomId;
-      el('lobbyHostUI').style.display = 'block';
-      el('lobbyGuestUI').style.display = 'none';
-      setDropzoneState('idle');
-      el('startStudioBtn').disabled = true;
-
       listenToRoom();
       switchScreen('lobbyScreen');
       showNotice(`Room created! Code: ${roomId}`, "success", 3000);
@@ -634,79 +436,56 @@ if (el('createRoomBtn')) {
       console.error("Create room error:", err);
       showNotice("Failed to create room: " + (err?.message || "network error"), "error");
     } finally {
-      if (loader) loader.style.display = 'none';
-      if (el('createRoomBtn')) el('createRoomBtn').disabled = false;
-      if (el('joinRoomBtn')) el('joinRoomBtn').disabled = false;
+      if (el('setupLoader')) el('setupLoader').style.display = 'none';
     }
   };
 }
 
 if (el('joinRoomBtn')) {
   el('joinRoomBtn').onclick = async () => {
-    const name = el('playerNameInput').value.trim() || 'Guest';
-    const roomId = el('roomCodeInput').value.trim().toUpperCase();
-    if(!roomId) return showNotice("Please enter a room code.", "warning");
-    if(roomId.length !== 5) return showNotice("Room code must be 5 letters (e.g. ABCDE).", "warning");
+  const name = el('playerNameInput').value.trim() || 'Guest';
+  const roomId = el('roomCodeInput').value.trim().toUpperCase();
+  if(!roomId) return showNotice("Please enter a room code.", "warning");
+  if(roomId.length !== 5) return showNotice("Room code must be 5 letters (e.g. ABCDE).", "warning");
+  try {
+    const ok = await authenticate();
+    if(!ok) return showNotice("Could not connect to authentication service.", "error");
+    const fb = await loadFirebase();
+    if(!fb) return showNotice("Could not initialize connection.", "error");
 
-    const loader = el('setupLoader');
-    const loaderText = el('setupLoaderText');
-    if (loader) {
-      loader.style.display = 'flex';
-      if (loaderText) loaderText.textContent = `Joining room ${roomId}...`;
+    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+    const snap = await fb.getDoc(roomRef);
+    if(!snap.exists()) return showNotice(`Room "${roomId}" was not found. Please verify the code.`, "error");
+
+    const data = snap.data();
+    if(data.players && data.players.length >= 4) return showNotice("This room is already full (maximum 4 players).", "warning");
+    if(data.status !== 'lobby') return showNotice("This room has already started its studio session.", "warning");
+
+    const color = PLAYER_COLORS[data.players.length % PLAYER_COLORS.length];
+    state.me = { id: state.uid, name, color, ready: false };
+    state.roomId = roomId;
+    state.isHost = false;
+    state.isSingleplayer = false;
+    state.scoringMode = Boolean(data.scoringMode);
+    state.roomData = { ...data, players: [...data.players, state.me] };
+
+    if(el('scoringToggle')) {
+      el('scoringToggle').checked = state.scoringMode;
+      el('scoringToggle').disabled = true;
     }
-    if (el('createRoomBtn')) el('createRoomBtn').disabled = true;
-    if (el('joinRoomBtn')) el('joinRoomBtn').disabled = true;
+    if(el('scoringHostNote')) {
+      el('scoringHostNote').style.display = 'block';
+      el('scoringHostNote').textContent = 'Host controls scoring mode';
+    }
+    if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
 
-    try {
-      const ok = await authenticate();
-      if(!ok) return showNotice("Could not connect to authentication service.", "error");
-      const fb = await loadFirebase();
-      if(!fb) return showNotice("Could not initialize connection.", "error");
-
-      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
-      const snap = await fb.getDoc(roomRef);
-      if(!snap.exists()) return showNotice(`Room "${roomId}" was not found. Please verify the code.`, "error");
-
-      const data = snap.data();
-      if(data.players && data.players.length >= 4) return showNotice("This room is already full (maximum 4 players).", "warning");
-      if(data.status !== 'lobby') return showNotice("This room has already started its studio session.", "warning");
-
-      const color = PLAYER_COLORS[data.players.length % PLAYER_COLORS.length];
-      state.me = { id: state.uid, name, color, ready: false };
-      state.roomId = roomId;
-      state.isHost = false;
-      state.isSingleplayer = false;
-      state.scoringMode = Boolean(data.scoringMode);
-      state.roomData = { ...data, players: [...data.players, state.me] };
-
-      if(el('scoringToggle')) {
-        el('scoringToggle').checked = state.scoringMode;
-        el('scoringToggle').disabled = true;
-      }
-      if(el('scoringHostNote')) {
-        el('scoringHostNote').style.display = 'block';
-        el('scoringHostNote').textContent = 'Host controls scoring mode';
-      }
-      if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
-
-      el('lobbyRoomCode').textContent = data.id;
-      renderLobbyPlayers(state.roomData.players, data.hostId);
-      el('lobbyHostUI').style.display = 'none';
-      el('lobbyGuestUI').style.display = 'block';
-
-      if (data.videoName) {
-        if (el('guestWaitContainer')) el('guestWaitContainer').style.display = 'none';
-        if (el('guestMatchUI')) el('guestMatchUI').style.display = 'block';
-        el('reqFileName').textContent = data.videoName;
-      } else {
-        if (el('guestWaitContainer')) el('guestWaitContainer').style.display = 'flex';
-        if (el('guestMatchUI')) el('guestMatchUI').style.display = 'none';
-      }
-
-      listenToRoom();
-      switchScreen('lobbyScreen');
-      showNotice(`Joined room ${roomId}!`, "success", 2500);
-      multiplayer.api.announcePlayer(state.roomId, state.me).catch(error => {
+    el('lobbyRoomCode').textContent = data.id;
+    renderLobbyPlayers(state.roomData.players, data.hostId);
+    el('lobbyGuestUI').style.display = 'block';
+    listenToRoom();
+    switchScreen('lobbyScreen');
+    showNotice(`Joined room ${roomId}!`, "success", 2500);
+    multiplayer.api.announcePlayer(state.roomId, state.me).catch(error => {
       console.error('Join room sync error:', error);
     });
   } catch(error) {
@@ -793,8 +572,6 @@ async function syncHostVideo(roomData){
   if(state.videoSyncing || state.videoSyncedName === roomData.videoName) return;
   state.videoSyncing = true;
   state.syncProgress = 0;
-  if (el('guestWaitContainer')) el('guestWaitContainer').style.display = 'none';
-  if (el('guestMatchUI')) el('guestMatchUI').style.display = 'block';
   el('reqFileName').textContent = roomData.videoName;
   el('syncProgressFill').style.width = '0%';
   el('syncProgressText').textContent = '0%';
@@ -802,14 +579,14 @@ async function syncHostVideo(roomData){
     state.file = await multiplayer.api.downloadVideo(state.roomId, progress => {
       el('syncProgressFill').style.width = `${progress}%`;
       el('syncProgressText').textContent = `${progress}%`;
-      el('guestMatchUI').querySelector('.sync-progress')?.setAttribute('aria-valuenow', progress);
+      el('guestMatchUI').querySelector('.sync-progress').setAttribute('aria-valuenow', progress);
       if(progress === 0 || progress === 100 || progress >= state.syncProgress + 5){
         state.syncProgress = progress;
         multiplayer.api.announcePlayer(state.roomId, { ...state.me, ready:false, syncProgress:progress }).catch(() => {});
       }
     });
     el('syncProgressFill').style.width = '100%';
-    el('syncProgressText').textContent = '100% — Ready for studio!';
+    el('syncProgressText').textContent = '100% - ready';
     state.videoSyncedName = roomData.videoName;
     state.me.ready = true;
     const fb = await loadFirebase();
@@ -823,7 +600,6 @@ async function syncHostVideo(roomData){
   } catch(error) {
     console.error('Host video sync error:', error);
     showNotice('Could not download the host video. Retrying shortly.', 'warning');
-    if (el('guestWaitContainer')) el('guestWaitContainer').style.display = 'flex';
   } finally {
     state.videoSyncing = false;
   }
@@ -841,14 +617,10 @@ async function handleHostFile(file){
   }
 
   state.file = file;
-  const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+  el('hostDropzone').textContent = `Selected: ${file.name}`;
 
   if(isSoloSession()){
     if(state.roomData) state.roomData.videoName = file.name;
-    setDropzoneState('ready', {
-      name: file.name,
-      meta: `${sizeMB} MB • Ready for studio • Click to replace`
-    });
     el('startStudioBtn').disabled = false;
     showNotice(`Loaded "${file.name}" for solo session.`, "success", 2500);
     return;
@@ -858,31 +630,14 @@ async function handleHostFile(file){
   if(!fb) return showNotice("Connection service unavailable. Please retry.", "error");
 
   try {
-    setDropzoneState('loading', {
-      title: `Uploading ${file.name}...`,
-      progress: 0,
-      subtitle: `0% (${sizeMB} MB)`
-    });
-
-    await multiplayer.api.uploadVideo(state.roomId, file, (progress) => {
-      setDropzoneState('loading', {
-        title: `Uploading ${file.name}...`,
-        progress,
-        subtitle: `${progress}% (${sizeMB} MB)`
-      });
-    });
-
-    setDropzoneState('ready', {
-      name: file.name,
-      meta: `${sizeMB} MB • Uploaded & ready for studio • Click to replace`
-    });
-    el('startStudioBtn').disabled = false;
+    el('hostDropzone').textContent = `Uploading ${file.name}...`;
+    await multiplayer.api.uploadVideo(state.roomId, file);
+    el('hostDropzone').textContent = `Selected: ${file.name}`;
     showNotice(`Video uploaded! Waiting for guests to sync.`, "success", 3000);
   } catch(error) {
     console.error('Host video upload error:', error);
     state.file = null;
-    setDropzoneState('idle');
-    el('startStudioBtn').disabled = true;
+    el('hostDropzone').textContent = 'Click or drop a video file here';
     return showNotice('Failed to upload video to the room: ' + (error?.message || 'network error'), 'error');
   }
 
@@ -949,8 +704,6 @@ if (el('startStudioBtn')) {
       if(!state.file){
         return showNotice("Please select a video file before starting studio.", "warning");
       }
-      el('startStudioBtn').disabled = true;
-      el('startStudioBtn').textContent = "Launching Studio...";
       state.roomData.status = 'studio';
       enterStudio();
       return;
@@ -961,24 +714,16 @@ if (el('startStudioBtn')) {
       if(!state.file && !state.roomData?.videoName){
         return showNotice("Please upload a video clip before starting the studio.", "warning");
       }
-      el('startStudioBtn').disabled = true;
-      el('startStudioBtn').textContent = "Launching Studio...";
       const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
       await fb.updateDoc(roomRef, { status: 'studio' });
     } catch(err) {
       console.error("Start studio error:", err);
-      el('startStudioBtn').disabled = false;
-      el('startStudioBtn').textContent = "Start Studio";
       showNotice("Could not start studio session: " + (err?.message || "network error"), "error");
     }
   };
 }
 
 async function enterStudio(){
-  if (el('startStudioBtn')) {
-    el('startStudioBtn').disabled = false;
-    el('startStudioBtn').textContent = "Start Studio";
-  }
   switchScreen('studioScreen');
   el('studioRoomBadge').textContent = state.isSingleplayer ? 'Mode: Solo' : `Room: ${state.roomId}`;
   if (el('studioScoreModeBadge')) {
@@ -986,7 +731,6 @@ async function enterStudio(){
   }
   
   renderStudioPlayerList();
-  updateMixSliderDisplay();
   
   el('editToggleInput').disabled = !state.isHost;
   el('undoBtn').style.display = state.isHost ? 'inline-flex' : 'none';
@@ -1066,8 +810,6 @@ async function enterStudio(){
 
   // Extract master buffer & audio envelope for waveforms & vocals
   if(state.file){
-    el('monitorLoading').style.display = 'flex';
-    el('monitorLoadingText').textContent = 'Extracting audio & waveforms...';
     try {
       const ctx = ensureCtx();
       if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
@@ -1080,8 +822,6 @@ async function enterStudio(){
       }
     } catch(e) {
       console.warn("Waveform extraction notice:", e);
-    } finally {
-      el('monitorLoading').style.display = 'none';
     }
   }
 
@@ -1383,10 +1123,6 @@ function renderStudioPlayerList(){
   const container = el('studioPlayerList');
   if(!container) return;
   const players = state.roomData?.players || (state.me ? [state.me] : []);
-  if (Array.isArray(players)) {
-    const colors = players.map(p => p?.color).filter(Boolean);
-    setAsteroidPlayerColors(colors);
-  }
   const hostId = state.roomData?.hostId;
 
   container.innerHTML = players.map(p => {
@@ -1737,15 +1473,12 @@ function drawWave(frag, progress = 0){
   ctx.scale(dpr, dpr);
   const w = rect.width, h = rect.height, mid = h/2;
   
-  const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
-  ctx.fillStyle = isLight ? '#F5EDFD' : '#100C09'; 
-  ctx.fillRect(0,0,w,h);
+  ctx.fillStyle = '#100C09'; ctx.fillRect(0,0,w,h);
   
   // Original
   const targetEnv = envelopeSlice(frag, Math.round(w));
   ctx.beginPath();
-  ctx.strokeStyle = isLight ? '#9D7BE8' : '#5B4A34'; 
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = '#5B4A34'; ctx.lineWidth = 1;
   for(let x=0; x<w; x++){
     const amp = (targetEnv[x] || 0) * (h*0.42);
     ctx.moveTo(x, mid - amp); ctx.lineTo(x, mid + amp);
@@ -1756,7 +1489,7 @@ function drawWave(frag, progress = 0){
   if(state.pb && state.pb.mode === 'record'){
     // Live trace (in CSS pixels, same units as w, so it lines up under any dpr)
     ctx.beginPath();
-    ctx.strokeStyle = state.me?.color || (isLight ? '#7C3AED' : '#B285F5'); ctx.lineWidth = 1.4;
+    ctx.strokeStyle = state.me?.color || '#B285F5'; ctx.lineWidth = 1.4;
     for(let x=0; x<state.liveTrace.length; x++){
       const amp = (state.liveTrace[x] || 0) * (h*0.42);
       ctx.moveTo(x, mid - amp); ctx.lineTo(x, mid + amp);
@@ -1769,7 +1502,7 @@ function drawWave(frag, progress = 0){
     const assignedUids = Array.isArray(frag.assigned) ? frag.assigned : [];
     assignedUids.forEach(uid => {
       if(takes[uid] && takes[uid].trace){
-        const pColor = roomPlayers.find(p => p.id === uid)?.color || (isLight ? '#7C3AED' : '#B285F5');
+        const pColor = roomPlayers.find(p => p.id === uid)?.color || '#B285F5';
         ctx.beginPath();
         ctx.strokeStyle = pColor; ctx.lineWidth = 1.4;
         for(let x=0; x<takes[uid].trace.length; x++){
@@ -1784,9 +1517,7 @@ function drawWave(frag, progress = 0){
   // Playhead
   if(progress > 0){
     const px = progress * w;
-    ctx.beginPath(); 
-    ctx.strokeStyle = isLight ? '#7C3AED' : 'rgba(243,236,225,0.7)'; 
-    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.strokeStyle = 'rgba(243,236,225,0.6)'; ctx.lineWidth = 1.5;
     ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
   }
 }
@@ -1938,7 +1669,6 @@ function updateLaneScoreDisplay(frag) {
 
 function renderMasterCanvas(){
   const canvas = el('masterCanvas');
-  if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
@@ -1947,17 +1677,14 @@ function renderMasterCanvas(){
   ctx.scale(dpr, dpr);
   ctx.clearRect(0,0,rect.width,rect.height);
   
-  const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
   const dur = state.duration || 1;
   state.fragments.forEach((f, i) => {
     const x0 = (f.start/dur) * rect.width, x1 = (f.end/dur) * rect.width;
     const isDone = f.assigned.length > 0 && f.assigned.every(id => state.takes[f.id] && state.takes[f.id][id]);
     
-    ctx.fillStyle = isDone 
-      ? (isLight ? 'rgba(16,185,129,0.22)' : 'rgba(16,185,129,0.2)') 
-      : (isLight ? 'rgba(124,58,237,0.08)' : 'rgba(122,108,92,0.14)');
+    ctx.fillStyle = isDone ? 'rgba(16,185,129,0.2)' : 'rgba(122,108,92,0.14)';
     ctx.fillRect(x0+1, 2, Math.max(1,x1-x0-2), rect.height-4);
-    ctx.strokeStyle = i === state.currentIndex ? '#E8A33D' : (isLight ? '#C4B5FD' : '#3B2F24');
+    ctx.strokeStyle = i === state.currentIndex ? '#E8A33D' : '#3B2F24';
     ctx.lineWidth = i === state.currentIndex ? 2 : 1;
     ctx.strokeRect(x0+1, 2, Math.max(1,x1-x0-2), rect.height-4);
   });
@@ -2029,17 +1756,9 @@ function renderFragmentList(){
 
 function setPauseButton(mode){
   const btn = el('pauseBtn');
-  if(!btn) return;
-  if(mode === 'paused'){ 
-    btn.innerHTML = 'Resume <kbd class="kbd-hint">Space</kbd>'; 
-    btn.disabled = false; 
-  } else if(mode === 'playing'){ 
-    btn.innerHTML = 'Pause <kbd class="kbd-hint">Space</kbd>'; 
-    btn.disabled = false; 
-  } else { 
-    btn.innerHTML = 'Pause <kbd class="kbd-hint">Space</kbd>'; 
-    btn.disabled = true; 
-  }
+  if(mode === 'paused'){ btn.textContent = 'Resume'; btn.disabled = false; }
+  else if(mode === 'playing'){ btn.textContent = 'Pause'; btn.disabled = false; }
+  else { btn.textContent = 'Pause'; btn.disabled = true; }
 }
 
 function sendPlaybackEvent(event){
@@ -2157,51 +1876,11 @@ function handleRoomEvent(event){
   }
 }
 
-function getMixVolume(){
-  const slider = el('mixSlider');
-  if(!slider) return (state.backgroundVolume !== undefined ? state.backgroundVolume : 0.65);
-  const val = parseFloat(slider.value);
-  const normalized = isNaN(val) ? 0.65 : Math.max(0, Math.min(1, val / 100));
-  state.backgroundVolume = normalized;
-  return normalized;
-}
-
-function updateMixSliderDisplay(){
-  const slider = el('mixSlider');
-  const label = el('mixVal');
-  if(!slider) return;
-  const vol = getMixVolume();
-  if(label) label.textContent = `${Math.round(vol * 100)}%`;
-  slider.setAttribute('aria-valuenow', Math.round(vol * 100));
-  
-  const v = el('mainVideo');
-  if(v && (!state.pb || !state.pb.remote)){
-    // Update video element volume in real-time whenever not recording
-    const isRecording = state.pb && state.pb.mode === 'record';
-    const isReviewWithBg = state.pb && state.pb.mode === 'review' && Boolean(state.pb.bgGain);
-    
-    if(!isRecording && !isReviewWithBg){
-      v.muted = (vol < 0.001);
-      v.volume = vol;
-    }
-  }
-
-  // Real-time audio gain adjustment for Web Audio review playback
-  if(state.pb && state.isPlaying && !state.paused){
-    const ctx = ensureCtx();
-    if(state.pb.bgGain){
-      state.pb.bgGain.gain.setValueAtTime(vol, ctx.currentTime);
-    }
-  }
-}
-
 function startReviewSources(pb, offsetSeconds){
   const ctx = ensureCtx();
   if(ctx.state === 'suspended') ctx.resume().catch(() => {});
   const takes = state.takes[pb.frag.id] || {};
   pb.sources = [];
-  
-  // 1. Play recorded takes for this line
   const allTakeUids = new Set([...(pb.frag.assigned || []), ...Object.keys(takes)]);
   allTakeUids.forEach(uid => {
     if(takes[uid] && takes[uid].buffer){
@@ -2213,44 +1892,6 @@ function startReviewSources(pb, offsetSeconds){
       pb.sources.push(src);
     }
   });
-
-  // 2. Play vocal-reduced background bed under the dub
-  const bgBuffer = state.backgroundBuffer || state.masterBuffer;
-  const mixVol = getMixVolume();
-  const v = el('mainVideo');
-
-  if(bgBuffer && mixVol > 0.001){
-    try {
-      const bgSrc = ctx.createBufferSource();
-      bgSrc.buffer = bgBuffer;
-      const bgGain = ctx.createGain();
-      bgGain.gain.setValueAtTime(mixVol, ctx.currentTime);
-      bgSrc.connect(bgGain).connect(ctx.destination);
-      
-      const bufferStart = Math.max(0, pb.frag.start + offsetSeconds);
-      const remainingDur = Math.max(0.01, pb.frag.end - (pb.frag.start + offsetSeconds));
-      
-      if(bufferStart < bgBuffer.duration){
-        bgSrc.start(0, bufferStart, remainingDur);
-        pb.sources.push(bgSrc);
-        pb.bgGain = bgGain;
-        pb.bgSource = bgSrc;
-      }
-      if(v) v.muted = true;
-    } catch(bgErr) {
-      console.warn("Could not start WebAudio background bed, falling back to video audio:", bgErr);
-      if(v && !pb.remote){
-        v.muted = (mixVol < 0.01);
-        v.volume = mixVol;
-      }
-    }
-  } else if(!bgBuffer && v && !pb.remote){
-    v.muted = (mixVol < 0.01);
-    v.volume = mixVol;
-  } else {
-    if(v) v.muted = true;
-  }
-
   pb.sourcesStartedAtCtxTime = ctx.currentTime;
   pb.sourcesOffsetAtStart = offsetSeconds;
 }
@@ -2294,19 +1935,9 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
     }
   }
 
-  const mixVol = getMixVolume();
-  const hasBgBuffer = Boolean(state.backgroundBuffer || state.masterBuffer);
-  if (isRemote || mode === 'record') {
-    v.muted = true;
-    v.volume = 0;
-  } else if (mode === 'review') {
-    v.muted = hasBgBuffer || (mixVol < 0.001);
-    v.volume = mixVol;
-  } else {
-    // 'original' mode (listening to original clip)
-    v.muted = (mixVol < 0.001);
-    v.volume = mixVol;
-  }
+  const mixVol = parseInt(el('mixSlider').value, 10) / 100;
+  v.muted = isRemote || mode === 'record';
+  v.volume = isRemote || mode === 'record' ? 0 : mixVol;
   v.playbackRate = 1;
   try {
     v.currentTime = f.start;
@@ -2359,7 +1990,6 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
       pb.recorder.start();
       el('monitorBadgeText').textContent = "Recording"; el('monitorBadge').classList.add('live');
       el('recordBtn').classList.add('is-armed');
-      el('recordBtn').innerHTML = 'Stop Take <kbd class="kbd-hint">R</kbd>';
       if(!isRemote) broadcastMyActivity('recording', f.id, state.currentIndex);
     } catch(recErr) {
       console.error("Audio recording start error:", recErr);
@@ -2372,8 +2002,7 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
     if(!isRemote) broadcastMyActivity('reviewing', f.id, state.currentIndex);
   } else {
-    v.muted = isRemote || (mixVol < 0.001);
-    v.volume = isRemote ? 0 : mixVol;
+    v.volume = isRemote ? 0 : 1.0;
     el('monitorBadgeText').textContent = remoteLabel || "Original"; el('monitorBadge').classList.toggle('live', Boolean(remoteLabel));
     if(!isRemote) broadcastMyActivity('listening', f.id, state.currentIndex);
   }
@@ -2458,8 +2087,6 @@ function pausePlayback(isRemote = false){
     pb.sourcesOffsetAtStart = pb.sourcesOffsetAtStart + elapsed;
     pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
     pb.sources = [];
-    pb.bgGain = null;
-    pb.bgSource = null;
   }
   el('monitorBadgeText').textContent = "Paused"; el('monitorBadge').classList.remove('live');
   setPauseButton('paused');
@@ -2483,9 +2110,6 @@ function resumePlayback(isRemote = false){
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
     if(!isRemote) broadcastMyActivity('reviewing', pb?.frag?.id, state.currentIndex);
   } else {
-    const vol = getMixVolume();
-    v.muted = isRemote || (vol < 0.001);
-    v.volume = isRemote ? 0 : vol;
     el('monitorBadgeText').textContent = "Original"; el('monitorBadge').classList.remove('live');
     if(!isRemote) broadcastMyActivity('listening', pb?.frag?.id, state.currentIndex);
   }
@@ -2510,7 +2134,6 @@ function finishPlayback(isRemote = false){
   v.pause();
   el('monitorBadgeText').textContent = "Idle"; el('monitorBadge').classList.remove('live');
   el('recordBtn').classList.remove('is-armed');
-  el('recordBtn').innerHTML = 'Record Take <kbd class="kbd-hint">R</kbd>';
   setPauseButton('idle');
   if(!isRemote) broadcastMyActivity('idle');
   
@@ -2518,8 +2141,6 @@ function finishPlayback(isRemote = false){
   if(pb){
     if(pb.syncTimer) clearInterval(pb.syncTimer);
     pb.sources && pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
-    pb.bgGain = null;
-    pb.bgSource = null;
     if(pb.mode === 'record' && pb.recorder){
       const fragId = pb.frag.id;
       const trace = [...state.liveTrace];
@@ -2614,8 +2235,6 @@ function stopPlayback(isRemote = false){
   if(pb){
     if(pb.syncTimer) clearInterval(pb.syncTimer);
     pb.sources && pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
-    pb.bgGain = null;
-    pb.bgSource = null;
     if(pb.recorder && pb.recorder.state !== 'inactive'){
       try{ pb.recorder.stop(); }catch(e){}
     }
@@ -2623,7 +2242,6 @@ function stopPlayback(isRemote = false){
   state.pb = null;
   el('monitorBadgeText').textContent = "Idle"; el('monitorBadge').classList.remove('live');
   el('recordBtn').classList.remove('is-armed');
-  el('recordBtn').innerHTML = 'Record Take <kbd class="kbd-hint">R</kbd>';
   setPauseButton('idle');
   if(!isRemote){
     broadcastMyActivity('idle');
@@ -2727,7 +2345,7 @@ if (el('renderBtn')) {
     
     recorder.start();
     const t0 = ctx.currentTime + 0.1;
-    const mixVol = getMixVolume();
+    const mixVol = parseInt(el('mixSlider').value, 10) / 100;
     let usedFallback = false;
     
     if(state.backgroundBuffer){

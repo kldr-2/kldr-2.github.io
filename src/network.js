@@ -11,11 +11,8 @@ export function createMultiplayerClient() {
   const subscribedPaths = new Set();
   let reconnectTimer = null;
 
-  let reconnectAttempts = 0;
-
   function getWsUrl() {
     if (typeof window === 'undefined' || !window.location) return 'ws://localhost:3000';
-    if (window.location.protocol === 'file:' || window.location.protocol === 'about:') return null;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}`;
   }
@@ -24,24 +21,21 @@ export function createMultiplayerClient() {
     if (typeof window === 'undefined' || typeof WebSocket === 'undefined') {
       return Promise.resolve(null);
     }
-    const wsUrl = getWsUrl();
-    if (!wsUrl) return Promise.resolve(null);
-
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
       return socketReadyPromise;
     }
 
     socketReadyPromise = new Promise((resolve) => {
       try {
-        socket = new WebSocket(wsUrl);
+        socket = new WebSocket(getWsUrl());
       } catch (err) {
+        console.error('WebSocket connection error:', err);
         scheduleReconnect();
         resolve(null);
         return;
       }
 
       socket.onopen = () => {
-        reconnectAttempts = 0;
         if (reconnectTimer) {
           clearTimeout(reconnectTimer);
           reconnectTimer = null;
@@ -62,8 +56,8 @@ export function createMultiplayerClient() {
         }
       };
 
-      socket.onerror = () => {
-        // Handled silently to avoid spamming console on static hosts
+      socket.onerror = (err) => {
+        console.warn('WebSocket error:', err);
       };
 
       socket.onclose = () => {
@@ -77,13 +71,10 @@ export function createMultiplayerClient() {
 
   function scheduleReconnect() {
     if (reconnectTimer) return;
-    reconnectAttempts++;
-    // Exponential backoff capped at 12s so static hosts without a backend aren't aggressively polled
-    const delay = Math.min(12000, 2000 * Math.pow(1.4, Math.min(reconnectAttempts - 1, 4)));
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       connectSocket().catch(() => {});
-    }, delay);
+    }, 2000);
   }
 
   function rawSend(msg) {

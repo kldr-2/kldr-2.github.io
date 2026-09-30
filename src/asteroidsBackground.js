@@ -1,8 +1,8 @@
 /**
- * Asteroids Vector Background
+ * Purple Asteroids Vector Background
  * Floating purple asteroids in the authentic Atari Asteroids art style.
- * Supports dynamic player color highlights when players join the lobby,
- * maintaining purple as the dominant majority even in a full lobby.
+ * Uses irregular polygonal wireframes, glow, toroidal edge wrapping,
+ * and z-index positioning for embedded iframe resilience.
  */
 
 let bgCanvas = null;
@@ -10,7 +10,6 @@ let bgCtx = null;
 let asteroids = [];
 let asteroidAnimId = null;
 let isStarted = false;
-let activePlayerColors = []; // List of non-purple player { hex, rgb }
 
 function hexToRgb(hex) {
   const clean = (hex || '#B285F5').replace('#', '').trim();
@@ -32,71 +31,6 @@ function getAccentRgb() {
 }
 
 let accentRgb = getAccentRgb();
-
-function isColorDifferentFromPurple(rgb, basePurple) {
-  const dr = rgb.r - basePurple.r;
-  const dg = rgb.g - basePurple.g;
-  const db = rgb.b - basePurple.b;
-  return Math.sqrt(dr * dr + dg * dg + db * db) > 55;
-}
-
-export function setAsteroidPlayerColors(colors = []) {
-  if (!Array.isArray(colors)) colors = [];
-  const base = getAccentRgb();
-  accentRgb = base;
-
-  const nonPurple = [];
-  const seen = new Set();
-
-  for (const c of colors) {
-    if (!c || typeof c !== 'string') continue;
-    const rgb = hexToRgb(c);
-    const key = `${rgb.r},${rgb.g},${rgb.b}`;
-    if (isColorDifferentFromPurple(rgb, base) && !seen.has(key)) {
-      seen.add(key);
-      nonPurple.push({ hex: c, rgb });
-    }
-  }
-
-  activePlayerColors = nonPurple;
-  reassignAsteroidColors();
-}
-
-export function updateThemeAccent() {
-  accentRgb = getAccentRgb();
-  reassignAsteroidColors();
-}
-
-function reassignAsteroidColors() {
-  if (!asteroids || !asteroids.length) return;
-  const base = getAccentRgb();
-  accentRgb = base;
-
-  // Reset all asteroids to base purple target first
-  for (const a of asteroids) {
-    a.targetRgb = { ...base };
-  }
-
-  if (activePlayerColors.length === 0) return;
-
-  // Purple must ALWAYS remain the dominant majority even with a full lobby:
-  // Non-purple colors combined can take at most 25% of total asteroids (at least 75% purple).
-  const maxNonPurple = Math.max(1, Math.floor(asteroids.length * 0.25));
-  const perColor = Math.max(1, Math.floor(maxNonPurple / activePlayerColors.length));
-
-  let assigned = 0;
-  activePlayerColors.forEach((pColor, cIdx) => {
-    for (let k = 0; k < perColor; k++) {
-      if (assigned >= maxNonPurple) break;
-      // Stably spread across the asteroid array (e.g. index 2, 6, 10...)
-      const targetIndex = (cIdx * 4 + k * 2 + 2) % asteroids.length;
-      if (asteroids[targetIndex]) {
-        asteroids[targetIndex].targetRgb = { ...pColor.rgb };
-        assigned++;
-      }
-    }
-  });
-}
 
 function makeAsteroidShape(radius) {
   const points = [];
@@ -120,7 +54,6 @@ function getViewportSize() {
 
 function makeAsteroid(w, h, reduceMotion) {
   const radius = 16 + Math.random() * 44;
-  const base = getAccentRgb();
   return {
     x: Math.random() * w,
     y: Math.random() * h,
@@ -131,8 +64,6 @@ function makeAsteroid(w, h, reduceMotion) {
     radius,
     shape: makeAsteroidShape(radius),
     opacity: 0.32 + Math.random() * 0.34,
-    currentRgb: { ...base },
-    targetRgb: { ...base }
   };
 }
 
@@ -153,7 +84,6 @@ function initAsteroids() {
   for (let i = 0; i < count; i++) {
     asteroids.push(makeAsteroid(w, h, reduceMotion));
   }
-  reassignAsteroidColors();
 }
 
 function drawAsteroid(a) {
@@ -169,18 +99,10 @@ function drawAsteroid(a) {
     else bgCtx.lineTo(px, py);
   });
   bgCtx.closePath();
-
-  const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
-  const color = a.currentRgb || accentRgb;
-  const r = Math.round(color.r);
-  const g = Math.round(color.g);
-  const b = Math.round(color.b);
-
-  const strokeAlpha = isLight ? Math.min(0.85, a.opacity * 1.3) : a.opacity;
-  bgCtx.strokeStyle = `rgba(${r},${g},${b},${strokeAlpha})`;
-  bgCtx.lineWidth = isLight ? 2.0 : 1.7;
-  bgCtx.shadowColor = isLight ? `rgba(${r},${g},${b},0.35)` : `rgba(${r},${g},${b},0.65)`;
-  bgCtx.shadowBlur = isLight ? 5 : 9;
+  bgCtx.strokeStyle = `rgba(${accentRgb.r},${accentRgb.g},${accentRgb.b},${a.opacity})`;
+  bgCtx.lineWidth = 1.7;
+  bgCtx.shadowColor = `rgba(${accentRgb.r},${accentRgb.g},${accentRgb.b},0.6)`;
+  bgCtx.shadowBlur = 9;
   bgCtx.stroke();
   bgCtx.restore();
 }
@@ -194,13 +116,6 @@ function updateAsteroid(a, w, h) {
   if (a.x > w + pad) a.x = -pad;
   if (a.y < -pad) a.y = h + pad;
   if (a.y > h + pad) a.y = -pad;
-
-  // Smooth color morphing
-  if (a.currentRgb && a.targetRgb) {
-    a.currentRgb.r += (a.targetRgb.r - a.currentRgb.r) * 0.04;
-    a.currentRgb.g += (a.targetRgb.g - a.currentRgb.g) * 0.04;
-    a.currentRgb.b += (a.targetRgb.b - a.currentRgb.b) * 0.04;
-  }
 }
 
 function asteroidFrame() {
@@ -230,6 +145,7 @@ export function stopAsteroids() {
   }
   if (bgCanvas) {
     bgCanvas.style.opacity = '0';
+    // Hide display after fade to guarantee 0 paint cost in studio
     setTimeout(() => {
       if (!isStarted && bgCanvas) {
         bgCanvas.style.display = 'none';
@@ -240,14 +156,14 @@ export function stopAsteroids() {
 
 export function initAsteroidsBackground(canvasId = 'bgAsteroids') {
   if (typeof document === 'undefined' || typeof window === 'undefined') {
-    return { start: startAsteroids, stop: stopAsteroids, setPlayerColors: setAsteroidPlayerColors };
+    return { start: startAsteroids, stop: stopAsteroids };
   }
 
   bgCanvas = document.getElementById(canvasId);
-  if (!bgCanvas) return { start: startAsteroids, stop: stopAsteroids, setPlayerColors: setAsteroidPlayerColors };
+  if (!bgCanvas) return { start: startAsteroids, stop: stopAsteroids };
 
   bgCtx = bgCanvas.getContext('2d');
-  if (!bgCtx) return { start: startAsteroids, stop: stopAsteroids, setPlayerColors: setAsteroidPlayerColors };
+  if (!bgCtx) return { start: startAsteroids, stop: stopAsteroids };
 
   accentRgb = getAccentRgb();
   resizeBgCanvas();
@@ -271,7 +187,6 @@ export function initAsteroidsBackground(canvasId = 'bgAsteroids') {
 
   return {
     start: startAsteroids,
-    stop: stopAsteroids,
-    setPlayerColors: setAsteroidPlayerColors
+    stop: stopAsteroids
   };
 }
