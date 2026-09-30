@@ -56,12 +56,83 @@ const state = {
 };
 
 const el = (id) => document.getElementById(id);
-function showNotice(msg){
-  el('noticeText').textContent = msg;
-  el('notice').classList.add('show');
-  setTimeout(() => el('notice').classList.remove('show'), 5000);
+
+function showNotice(msg, type = 'error', durationMs = 4200){
+  const container = el('toastContainer');
+  if(!container){
+    if(el('noticeText') && el('notice')){
+      el('noticeText').textContent = msg;
+      el('notice').classList.add('show');
+      setTimeout(() => el('notice')?.classList.remove('show'), durationMs);
+    }
+    return;
+  }
+
+  // Deduplication: if exact same message is currently visible, refresh its pulse
+  const existing = Array.from(container.children).find(t => t.querySelector('.toast-text')?.textContent === msg);
+  if (existing) {
+    existing.classList.remove('fading-out');
+    existing.style.animation = 'none';
+    existing.offsetHeight; /* trigger reflow */
+    existing.style.animation = 'toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+    return;
+  }
+
+  // Cap number of simultaneous toasts to avoid clutter
+  while (container.children.length >= 4) {
+    container.removeChild(container.firstChild);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  
+  let iconHtml = '';
+  if(type === 'error'){
+    iconHtml = `<svg class="toast-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" /></svg>`;
+  } else if(type === 'warning'){
+    iconHtml = `<svg class="toast-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" /></svg>`;
+  } else if(type === 'success'){
+    iconHtml = `<svg class="toast-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" /></svg>`;
+  } else {
+    iconHtml = `<svg class="toast-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.247.25v3.25H9a.75.75 0 000 1.5h2a.75.75 0 000-1.5h-.25V10.5A1.5 1.5 0 009.25 9H9z" clip-rule="evenodd" /></svg>`;
+  }
+
+  const textSpan = document.createElement('span');
+  textSpan.className = 'toast-text';
+  textSpan.textContent = msg;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'toast-close';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.innerHTML = '&times;';
+
+  toast.innerHTML = iconHtml;
+  toast.appendChild(textSpan);
+  toast.appendChild(closeBtn);
+
+  let isDismissed = false;
+  const dismiss = () => {
+    if(isDismissed) return;
+    isDismissed = true;
+    toast.classList.add('fading-out');
+    setTimeout(() => {
+      if(toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 420);
+  };
+
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    dismiss();
+  };
+  toast.onclick = dismiss;
+
+  container.appendChild(toast);
+
+  if(durationMs > 0){
+    setTimeout(dismiss, durationMs);
+  }
 }
-el('noticeDismiss').onclick = () => el('notice').classList.remove('show');
 
 let confirmCallback = null;
 function showConfirm(title, desc, callback) {
@@ -78,9 +149,25 @@ el('confirmOkBtn').onclick = () => {
   el('confirmModal').classList.remove('active');
   if (confirmCallback) confirmCallback();
 };
+el('confirmModal').onclick = (e) => {
+  if (e.target === el('confirmModal')) {
+    el('confirmModal').classList.remove('active');
+    confirmCallback = null;
+  }
+};
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && el('confirmModal').classList.contains('active')) {
+    el('confirmModal').classList.remove('active');
+    confirmCallback = null;
+  }
+});
 
 el('savedDubsBtn').onclick = () => switchScreen('savedDubsScreen');
 el('savedDubsBackBtn').onclick = () => switchScreen('setupScreen');
+
+function isSoloSession() {
+  return Boolean(state.isSingleplayer || !state.roomId || state.roomId === 'LOCAL');
+}
 
 function resetToMenu() {
   if (state.unsubRoom) { state.unsubRoom(); state.unsubRoom = null; }
@@ -124,9 +211,17 @@ function resetToMenu() {
 }
 
 el('lobbyBackBtn').onclick = () => {
+  if (isSoloSession()) {
+    resetToMenu();
+    return;
+  }
   showConfirm('Leave Lobby?', 'Are you sure you want to return to the main menu? You will disconnect from this room.', resetToMenu);
 };
 el('studioBackBtn').onclick = () => {
+  if (isSoloSession()) {
+    resetToMenu();
+    return;
+  }
   showConfirm('Leave Studio?', 'Are you sure you want to return to the main menu? You will disconnect from this session.', resetToMenu);
 };
 
@@ -185,6 +280,7 @@ el('singleplayerBtn').onclick = () => {
   state.isSingleplayer = true;
   state.uid = 'local_player';
   state.isHost = true;
+  state.roomId = 'LOCAL';
   state.me = { id: state.uid, name: 'You', color: PLAYER_COLORS[0], ready: true };
   state.roomData = {
     id: 'LOCAL',
@@ -211,67 +307,77 @@ el('singleplayerBtn').onclick = () => {
 
 el('createRoomBtn').onclick = async () => {
   const name = el('playerNameInput').value.trim() || 'Host';
-  const ok = await authenticate();
-  if(!ok) return;
-  const fb = await loadFirebase();
-  if(!fb) return;
-  
-  const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
-  state.roomId = roomId;
-  state.isHost = true;
-  state.me = { id: state.uid, name, color: PLAYER_COLORS[0], ready: false };
-  
-  const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
-  await fb.setDoc(roomRef, {
-    id: roomId,
-    hostId: state.uid,
-    players: [state.me],
-    status: 'lobby',
-    videoName: null,
-    videoSize: null,
-    fragments: []
-  });
-  
-  listenToRoom();
-  switchScreen('lobbyScreen');
-  el('setupLoader').style.display = 'none';
+  try {
+    const ok = await authenticate();
+    if(!ok) return showNotice("Could not connect to authentication service.", "error");
+    const fb = await loadFirebase();
+    if(!fb) return showNotice("Could not initialize connection.", "error");
+    
+    const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
+    state.roomId = roomId;
+    state.isHost = true;
+    state.isSingleplayer = false;
+    state.me = { id: state.uid, name, color: PLAYER_COLORS[0], ready: false };
+    
+    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+    await fb.setDoc(roomRef, {
+      id: roomId,
+      hostId: state.uid,
+      players: [state.me],
+      status: 'lobby',
+      videoName: null,
+      videoSize: null,
+      fragments: []
+    });
+    
+    listenToRoom();
+    switchScreen('lobbyScreen');
+    showNotice(`Room created! Code: ${roomId}`, "success", 3000);
+  } catch(err) {
+    console.error("Create room error:", err);
+    showNotice("Failed to create room: " + (err?.message || "network error"), "error");
+  } finally {
+    el('setupLoader').style.display = 'none';
+  }
 };
 
 el('joinRoomBtn').onclick = async () => {
   const name = el('playerNameInput').value.trim() || 'Guest';
   const roomId = el('roomCodeInput').value.trim().toUpperCase();
-  if(roomId.length !== 5) return showNotice("Invalid room code format.");
+  if(!roomId) return showNotice("Please enter a room code.", "warning");
+  if(roomId.length !== 5) return showNotice("Room code must be 5 letters (e.g. ABCDE).", "warning");
   try {
     const ok = await authenticate();
-    if(!ok) return;
+    if(!ok) return showNotice("Could not connect to authentication service.", "error");
     const fb = await loadFirebase();
-    if(!fb) return;
+    if(!fb) return showNotice("Could not initialize connection.", "error");
 
     const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
     const snap = await fb.getDoc(roomRef);
-    if(!snap.exists()) return showNotice("Room not found.");
+    if(!snap.exists()) return showNotice(`Room "${roomId}" was not found. Please verify the code.`, "error");
 
     const data = snap.data();
-    if(data.players.length >= 4) return showNotice("Room is full.");
-    if(data.status !== 'lobby') return showNotice("Room already started.");
+    if(data.players && data.players.length >= 4) return showNotice("This room is already full (maximum 4 players).", "warning");
+    if(data.status !== 'lobby') return showNotice("This room has already started its studio session.", "warning");
 
-    const color = PLAYER_COLORS[data.players.length];
+    const color = PLAYER_COLORS[data.players.length % PLAYER_COLORS.length];
     state.me = { id: state.uid, name, color, ready: false };
     state.roomId = roomId;
     state.isHost = false;
+    state.isSingleplayer = false;
     state.roomData = { ...data, players: [...data.players, state.me] };
     el('lobbyRoomCode').textContent = data.id;
     renderLobbyPlayers(state.roomData.players, data.hostId);
     el('lobbyGuestUI').style.display = 'block';
     listenToRoom();
     switchScreen('lobbyScreen');
+    showNotice(`Joined room ${roomId}!`, "success", 2500);
     multiplayer.api.announcePlayer(state.roomId, state.me).catch(error => {
       console.error('Join room sync error:', error);
-      showNotice('Connected to the room, but the player list is still syncing.');
     });
   } catch(error) {
     console.error('Join room error:', error);
-    showNotice(error.message || 'Could not join that room.');
+    showNotice("Could not join that room: " + (error?.message || "network error"), "error");
   } finally {
     el('setupLoader').style.display = 'none';
   }
@@ -356,66 +462,121 @@ async function syncHostVideo(roomData){
     await multiplayer.api.announcePlayer(state.roomId, state.me = { ...state.me, ready: true, syncProgress:100 });
   } catch(error) {
     console.error('Host video sync error:', error);
-    showNotice('Could not download the host video. Retrying shortly.');
+    showNotice('Could not download the host video. Retrying shortly.', 'warning');
   } finally {
     state.videoSyncing = false;
   }
 }
 
-// Host File Selection
-el('hostDropzone').onclick = () => el('hostFileInput').click();
-el('hostFileInput').onchange = async (e) => {
-  const file = e.target.files[0];
+// Host File Selection & Drag-and-Drop
+async function handleHostFile(file){
   if(!file) return;
-  if(!file.type.startsWith('video/')) return showNotice("Must be a video file.");
-  
+  const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|ogg)$/i.test(file.name);
+  if(!isVideo){
+    return showNotice("Please choose a valid video file (MP4, WebM, or MOV).", "error");
+  }
+  if(file.size > 250 * 1024 * 1024){
+    showNotice("Large file detected (>250MB). Upload and audio processing may take longer.", "warning");
+  }
+
   state.file = file;
   el('hostDropzone').textContent = `Selected: ${file.name}`;
-  
-  if(state.isSingleplayer){
-    state.roomData.videoName = file.name;
+
+  if(isSoloSession()){
+    if(state.roomData) state.roomData.videoName = file.name;
     el('startStudioBtn').disabled = false;
+    showNotice(`Loaded "${file.name}" for solo session.`, "success", 2500);
     return;
   }
-  
+
   const fb = await loadFirebase();
-  if(!fb) return;
+  if(!fb) return showNotice("Connection service unavailable. Please retry.", "error");
+
   try {
+    el('hostDropzone').textContent = `Uploading ${file.name}...`;
     await multiplayer.api.uploadVideo(state.roomId, file);
+    el('hostDropzone').textContent = `Selected: ${file.name}`;
+    showNotice(`Video uploaded! Waiting for guests to sync.`, "success", 3000);
   } catch(error) {
     console.error('Host video upload error:', error);
     state.file = null;
     el('hostDropzone').textContent = 'Click or drop a video file here';
-    return showNotice('Could not upload the video to the room.');
+    return showNotice('Failed to upload video to the room: ' + (error?.message || 'network error'), 'error');
   }
-  const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-  
-  // Set host ready
-  const currentPlayers = state.roomData?.players || (state.me ? [state.me] : []);
-  const updatedPlayers = currentPlayers.map(p => p.id === state.uid ? {...p, ready: true} : p);
-  if(!updatedPlayers.some(p => p.id === state.uid) && state.me){
-    updatedPlayers.push({ ...state.me, ready: true });
+
+  try {
+    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+    const currentPlayers = state.roomData?.players || (state.me ? [state.me] : []);
+    const updatedPlayers = currentPlayers.map(p => p.id === state.uid ? {...p, ready: true} : p);
+    if(!updatedPlayers.some(p => p.id === state.uid) && state.me){
+      updatedPlayers.push({ ...state.me, ready: true });
+    }
+    if(state.me) state.me.ready = true;
+
+    await fb.updateDoc(roomRef, {
+      videoName: file.name,
+      videoSize: file.size,
+      players: updatedPlayers
+    });
+  } catch(dbErr) {
+    console.error('Failed to update room metadata:', dbErr);
+    showNotice('Failed to update room status. Please try re-selecting the file.', 'error');
   }
-  if(state.me) state.me.ready = true;
-  
-  await fb.updateDoc(roomRef, {
-    videoName: file.name,
-    videoSize: file.size,
-    players: updatedPlayers
-  });
-  el('hostDropzone').textContent = `Selected: ${file.name}`;
+}
+
+el('hostDropzone').onclick = () => el('hostFileInput').click();
+el('hostFileInput').onchange = (e) => {
+  const file = e.target.files && e.target.files[0];
+  handleHostFile(file);
 };
 
+['dragenter', 'dragover'].forEach(eventName => {
+  el('hostDropzone').addEventListener(eventName, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    el('hostDropzone').classList.add('drag-over');
+  });
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+  el('hostDropzone').addEventListener(eventName, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    el('hostDropzone').classList.remove('drag-over');
+  });
+});
+
+el('hostDropzone').addEventListener('drop', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  el('hostDropzone').classList.remove('drag-over');
+  const dt = e.dataTransfer;
+  if(dt && dt.files && dt.files.length > 0){
+    handleHostFile(dt.files[0]);
+  }
+});
+
 el('startStudioBtn').onclick = async () => {
-  if (state.isSingleplayer) {
+  if (isSoloSession()) {
+    if(!state.file){
+      return showNotice("Please select a video file before starting studio.", "warning");
+    }
     state.roomData.status = 'studio';
     enterStudio();
     return;
   }
-  const fb = await loadFirebase();
-  if(!fb) return;
-  const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-  await fb.updateDoc(roomRef, { status: 'studio' });
+  try {
+    const fb = await loadFirebase();
+    if(!fb) return showNotice("Connection lost. Please refresh.", "error");
+    if(!state.file && !state.roomData?.videoName){
+      return showNotice("Please upload a video clip before starting the studio.", "warning");
+    }
+    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+    await fb.updateDoc(roomRef, { status: 'studio' });
+  } catch(err) {
+    console.error("Start studio error:", err);
+    showNotice("Could not start studio session: " + (err?.message || "network error"), "error");
+  }
 };
 
 async function enterStudio(){
@@ -938,8 +1099,25 @@ function selectFragment(idx, skipRedraw = false, isRemote = false){
   }
 }
 
-el('prevFragBtn').onclick = () => selectFragment(Math.max(0, state.currentIndex - 1));
-el('nextFragBtn').onclick = () => selectFragment(Math.min(state.fragments.length - 1, state.currentIndex + 1));
+el('prevFragBtn').onclick = () => {
+  if(!state.fragments || state.fragments.length === 0){
+    return showNotice("No dub lines available.", "info");
+  }
+  if(state.currentIndex <= 0){
+    return showNotice("Already on the first line.", "info", 1800);
+  }
+  selectFragment(state.currentIndex - 1);
+};
+
+el('nextFragBtn').onclick = () => {
+  if(!state.fragments || state.fragments.length === 0){
+    return showNotice("No dub lines available.", "info");
+  }
+  if(state.currentIndex >= state.fragments.length - 1){
+    return showNotice("Already on the last line.", "info", 1800);
+  }
+  selectFragment(state.currentIndex + 1);
+};
 
 function saveState() {
   state.undoStack.push({
@@ -951,73 +1129,87 @@ function saveState() {
 }
 
 el('undoBtn').onclick = async () => {
-  if (!state.isHost || state.undoStack.length === 0) return;
-  const snap = state.undoStack.pop();
-  if (state.undoStack.length === 0) el('undoBtn').disabled = true;
+  if (!state.isHost) return showNotice("Only the room host can undo line edits.", "warning");
+  if (state.undoStack.length === 0) return showNotice("Nothing to undo.", "info", 1800);
+  try {
+    const snap = state.undoStack.pop();
+    if (state.undoStack.length === 0) el('undoBtn').disabled = true;
 
-  if (state.isSingleplayer) {
-    state.fragments = snap.fragments;
-    state.currentIndex = Math.min(snap.currentIndex, state.fragments.length - 1);
-    renderMasterCanvas();
-    renderFragmentList();
-    if (state.fragments.length > 0) selectFragment(state.currentIndex, true);
-  } else {
-    const fb = await loadFirebase();
-    if(!fb) return;
-    const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-    await fb.updateDoc(roomRef, { fragments: snap.fragments });
+    if (isSoloSession()) {
+      state.fragments = snap.fragments;
+      state.currentIndex = Math.min(snap.currentIndex, state.fragments.length - 1);
+      renderMasterCanvas();
+      renderFragmentList();
+      if (state.fragments.length > 0) selectFragment(state.currentIndex, true);
+    } else {
+      const fb = await loadFirebase();
+      if(fb && state.roomId){
+        const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+        await fb.updateDoc(roomRef, { fragments: snap.fragments });
+      }
+    }
+    showNotice("Reverted line edit.", "info", 1800);
+  } catch(err) {
+    console.error("Undo error:", err);
+    showNotice("Failed to undo edit: " + (err?.message || "error"), "error");
   }
 };
 
 async function mergeWithNext(index) {
-  if (!state.isHost || index < 0 || index >= state.fragments.length - 1) return;
-  saveState();
-  
-  const a = state.fragments[index];
-  const b = state.fragments[index + 1];
-  const assignedSet = new Set([...a.assigned, ...b.assigned]);
-  const newAssigned = Array.from(assignedSet).slice(0, 2);
+  if (!state.isHost) return showNotice("Only the room host can merge lines.", "warning");
+  if (index < 0 || index >= state.fragments.length - 1) return;
+  try {
+    saveState();
+    
+    const a = state.fragments[index];
+    const b = state.fragments[index + 1];
+    const assignedSet = new Set([...(a.assigned || []), ...(b.assigned || [])]);
+    const newAssigned = Array.from(assignedSet).slice(0, 2);
 
-  const merged = { 
-    id: 'f_' + Math.random().toString(36).slice(2,8), 
-    start: a.start, 
-    end: b.end, 
-    assigned: newAssigned 
-  };
-  
-  const newFrags = [...state.fragments];
-  newFrags.splice(index, 2, merged);
-  
-  if (state.isSingleplayer) {
+    const merged = { 
+      id: 'f_' + Math.random().toString(36).slice(2,8), 
+      start: a.start, 
+      end: b.end, 
+      assigned: newAssigned 
+    };
+    
+    const newFrags = [...state.fragments];
+    newFrags.splice(index, 2, merged);
+    
     state.fragments = newFrags;
     state.currentIndex = Math.min(state.currentIndex, newFrags.length - 1);
     renderMasterCanvas();
     renderFragmentList();
     selectFragment(state.currentIndex, true);
-  } else {
-    state.fragments = newFrags;
-    state.currentIndex = Math.min(state.currentIndex, newFrags.length - 1);
-    renderMasterCanvas();
-    renderFragmentList();
-    selectFragment(state.currentIndex, true);
-    sendPlaybackEvent({ action: 'sync-fragments', fragments: newFrags, activeLineIndex: state.currentIndex });
-    const fb = await loadFirebase();
-    if(fb){
-      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-      await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: state.currentIndex });
+
+    if (!isSoloSession() && state.roomId) {
+      sendPlaybackEvent({ action: 'sync-fragments', fragments: newFrags, activeLineIndex: state.currentIndex });
+      const fb = await loadFirebase();
+      if(fb){
+        const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+        await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: state.currentIndex });
+      }
     }
+    showNotice(`Merged Line ${index + 1} with Line ${index + 2}.`, "info", 2000);
+  } catch(err) {
+    console.error("Merge error:", err);
+    showNotice("Failed to merge lines: " + (err?.message || "error"), "error");
   }
 }
 
 // Edit Mode (Host only)
 el('editToggleInput').onchange = (e) => {
-  if(!state.isHost) return;
+  if(!state.isHost) {
+    e.target.checked = false;
+    return showNotice("Only the host can enable line editing.", "warning");
+  }
   state.editMode = e.target.checked;
   el('editToggle').classList.toggle('on', state.editMode);
+  showNotice(state.editMode ? "Line edit mode enabled. Click anywhere on the timeline to split lines." : "Line edit mode disabled.", "info", 2200);
 };
 
 el('masterCanvas').onclick = async (e) => {
-  if(state.fragments.length === 0) return;
+  if(state.fragments.length === 0) return showNotice("No dub lines loaded.", "info");
   const rect = el('masterCanvas').getBoundingClientRect();
   const t = ((e.clientX - rect.left) / rect.width) * state.duration;
   
@@ -1025,27 +1217,35 @@ el('masterCanvas').onclick = async (e) => {
     const idx = state.fragments.findIndex(f => t > f.start && t < f.end);
     if(idx > -1) {
       const f = state.fragments[idx];
-      if(t - f.start < 0.3 || f.end - t < 0.3) return; // Too close
+      if(t - f.start < 0.3 || f.end - t < 0.3) {
+        return showNotice("Slice too close to line boundary (minimum 0.3s).", "warning", 2400);
+      }
       
-      saveState();
-      
-      const a = { id: 'f_'+Math.random().toString(36).slice(2,6), start: f.start, end: t, assigned: [...f.assigned] };
-      const b = { id: 'f_'+Math.random().toString(36).slice(2,6), start: t, end: f.end, assigned: [...f.assigned] };
-      const newFrags = [...state.fragments];
-      newFrags.splice(idx, 1, a, b);
-      
-      state.fragments = newFrags;
-      renderMasterCanvas();
-      renderFragmentList();
-      selectFragment(idx, true);
-      
-      if (!state.isSingleplayer && state.roomId) {
-        sendPlaybackEvent({ action: 'sync-fragments', fragments: newFrags, activeLineIndex: idx });
-        const fb = await loadFirebase();
-        if(fb){
-          const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-          await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: idx });
+      try {
+        saveState();
+        
+        const a = { id: 'f_'+Math.random().toString(36).slice(2,6), start: f.start, end: t, assigned: [...(f.assigned || [])] };
+        const b = { id: 'f_'+Math.random().toString(36).slice(2,6), start: t, end: f.end, assigned: [...(f.assigned || [])] };
+        const newFrags = [...state.fragments];
+        newFrags.splice(idx, 1, a, b);
+        
+        state.fragments = newFrags;
+        renderMasterCanvas();
+        renderFragmentList();
+        selectFragment(idx, true);
+        showNotice(`Split Line ${idx + 1} at ${t.toFixed(1)}s.`, "info", 2000);
+        
+        if (!isSoloSession() && state.roomId) {
+          sendPlaybackEvent({ action: 'sync-fragments', fragments: newFrags, activeLineIndex: idx });
+          const fb = await loadFirebase();
+          if(fb){
+            const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+            await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: idx });
+          }
         }
+      } catch(err) {
+        console.error("Split line error:", err);
+        showNotice("Could not split line: " + (err?.message || "error"), "error");
       }
     }
   } else {
@@ -1363,9 +1563,20 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
   
   if(mode === 'record'){
     try{
-      if(!state.micStream) state.micStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}});
+      if(!state.micStream) {
+        state.micStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}});
+      }
     }catch(err){
-      showNotice("Microphone access was blocked or unavailable - allow microphone access to record a take.");
+      console.error("Microphone access error:", err);
+      let errMsg = "Microphone access blocked or unavailable.";
+      if(err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'){
+        errMsg = "Microphone permission denied. Allow mic access in your browser to record.";
+      } else if(err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError'){
+        errMsg = "No microphone found. Please connect an audio input device.";
+      } else if(err.name === 'NotReadableError' || err.name === 'TrackStartError'){
+        errMsg = "Microphone is in use by another application.";
+      }
+      showNotice(errMsg, 'error');
       return;
     }
   }
@@ -1408,23 +1619,30 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
   state.pb = pb;
   
   if(mode === 'record'){
-    const micSrc = ctx.createMediaStreamSource(state.micStream);
-    pb.analyser = ctx.createAnalyser();
-    pb.analyser.fftSize = 1024;
-    micSrc.connect(pb.analyser);
-    
-    const mimeOpts = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(m => {
-      try { return MediaRecorder.isTypeSupported(m); } catch(e){ return false; }
-    });
-    pb.recorder = new MediaRecorder(state.micStream, mimeOpts ? {mimeType: mimeOpts} : undefined);
-    
-    pb.recorder.ondataavailable = e => { if(e.data.size) pb.chunks.push(e.data); };
-    const waveWidth = Math.round(el('waveCanvas').getBoundingClientRect().width) || 300;
-    state.liveTrace = new Array(waveWidth).fill(0);
-    pb.recorder.start();
-    el('monitorBadgeText').textContent = "Recording"; el('monitorBadge').classList.add('live');
-    el('recordBtn').classList.add('is-armed');
-    if(!isRemote) broadcastMyActivity('recording', f.id, state.currentIndex);
+    try {
+      const micSrc = ctx.createMediaStreamSource(state.micStream);
+      pb.analyser = ctx.createAnalyser();
+      pb.analyser.fftSize = 1024;
+      micSrc.connect(pb.analyser);
+      
+      const mimeOpts = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(m => {
+        try { return MediaRecorder.isTypeSupported(m); } catch(e){ return false; }
+      });
+      pb.recorder = new MediaRecorder(state.micStream, mimeOpts ? {mimeType: mimeOpts} : undefined);
+      
+      pb.recorder.ondataavailable = e => { if(e.data.size) pb.chunks.push(e.data); };
+      const waveWidth = Math.round(el('waveCanvas').getBoundingClientRect().width) || 300;
+      state.liveTrace = new Array(waveWidth).fill(0);
+      pb.recorder.start();
+      el('monitorBadgeText').textContent = "Recording"; el('monitorBadge').classList.add('live');
+      el('recordBtn').classList.add('is-armed');
+      if(!isRemote) broadcastMyActivity('recording', f.id, state.currentIndex);
+    } catch(recErr) {
+      console.error("Audio recording start error:", recErr);
+      showNotice("Could not start audio recorder: " + (recErr.message || "recording device error"), 'error');
+      stopPlayback(isRemote);
+      return;
+    }
   } else if (mode === 'review'){
     startReviewSources(pb, 0);
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
@@ -1452,9 +1670,13 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
       v.muted = true;
       v.play().then(() => {
         if(state.pb === pb) pb.hasPlayed = true;
-      }).catch(e => console.warn('Muted playback also blocked:', e));
+      }).catch(e => {
+        console.warn('Muted playback also blocked:', e);
+        showNotice("Video autoplay was blocked by browser. Click anywhere on page to activate.", 'warning');
+      });
     } else {
       console.warn('Playback could not start:', error);
+      showNotice("Video playback could not start: " + (error?.message || "browser restriction"), 'error');
     }
   });
   runLoop();
@@ -1587,9 +1809,10 @@ function finishPlayback(isRemote = false){
           checkRecordAbility();
         } catch(decErr) {
           console.error("Local take decode error:", decErr);
+          showNotice("Failed to decode your recorded audio take.", "error");
         }
 
-        if (state.isSingleplayer) return;
+        if (isSoloSession()) return;
 
         // In multiplayer, send take to peers immediately & save to room storage
         const reader = new FileReader();
@@ -1620,6 +1843,7 @@ function finishPlayback(isRemote = false){
             });
           } catch (err) {
             console.error("Multiplayer take upload error:", err);
+            showNotice("Failed to sync take with room server.", "warning");
           }
         };
       };
@@ -1655,12 +1879,20 @@ function stopPlayback(isRemote = false){
   }
 }
 
-el('listenBtn').onclick = () => playFragment('original');
+el('listenBtn').onclick = () => {
+  const f = state.fragments[state.currentIndex];
+  if(!f) return showNotice("No line selected.", "warning");
+  playFragment('original');
+};
+
 el('recordBtn').onclick = async () => {
   const f = state.fragments[state.currentIndex];
-  if(!f) return;
+  if(!f) return showNotice("No line selected to record.", "warning");
+  if(f.end - f.start < 0.2){
+    return showNotice("This line is too short to record (< 0.2s). Try merging it with an adjacent line.", "warning", 3000);
+  }
   const assigned = Array.isArray(f.assigned) ? f.assigned : [];
-  if(!state.isSingleplayer && !assigned.includes(state.uid)){
+  if(!isSoloSession() && !assigned.includes(state.uid)){
     if(assigned.length < 2){
       f.assigned = [...assigned, state.uid];
       renderAssignmentUI(f);
@@ -1682,102 +1914,132 @@ el('recordBtn').onclick = async () => {
   }
   playFragment('record');
 };
-el('reviewBtn').onclick = () => playFragment('review');
+
+el('reviewBtn').onclick = () => {
+  const f = state.fragments[state.currentIndex];
+  if(!f) return showNotice("No line selected.", "warning");
+  const takes = state.takes[f.id] || {};
+  if(Object.keys(takes).length === 0){
+    return showNotice("No takes recorded for this line yet. Hit Record to lay one down!", "info", 2400);
+  }
+  playFragment('review');
+};
 
 el('renderBtn').onclick = async () => {
   const v = el('mainVideo');
-  if(!v.captureStream && !v.mozCaptureStream) return showNotice("Export not supported in this browser.");
+  if(!v.captureStream && !v.mozCaptureStream){
+    return showNotice("Export is not supported in this browser (captureStream unavailable).", "error");
+  }
+  if(!state.file && (!v.src || v.src === window.location.href)){
+    return showNotice("No video loaded to export.", "warning");
+  }
+  if(!state.duration || state.duration <= 0){
+    return showNotice("Video duration is invalid. Please wait for video to load.", "warning");
+  }
   
   stopPlayback();
   el('renderBtn').disabled = true;
   el('renderProgress').classList.add('show');
   el('downloadLink').classList.remove('show');
   
-  const ctx = ensureCtx();
-  const dest = ctx.createMediaStreamDestination();
-  const vStream = v.captureStream ? v.captureStream() : v.mozCaptureStream();
-  const combined = new MediaStream([...vStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
-  
-  const mimeOpts = ['video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'].find(m => {
-    try { return MediaRecorder.isTypeSupported(m); } catch(e){ return false; }
-  });
-  const recorder = new MediaRecorder(combined, mimeOpts ? { mimeType: mimeOpts } : undefined);
-  
-  const chunks = [];
-  recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
-  const finished = new Promise(r => recorder.onstop = r);
-  
-  v.muted = true; v.currentTime = 0;
-  await new Promise(r => { v.onseeked = r; setTimeout(r,300); });
-  
-  recorder.start();
-  const t0 = ctx.currentTime + 0.1;
-  const mixVol = parseInt(el('mixSlider').value, 10) / 100;
-  let usedFallback = false;
-  
-  // Continuous background bed: the original clip with its voice cancelled out,
-  // so music/ambience keeps playing under the whole dub. Falls back to the
-  // plain original (voice included, at the same level) if the source is mono.
-  if(state.backgroundBuffer){
-    const bgSrc = ctx.createBufferSource();
-    bgSrc.buffer = state.backgroundBuffer;
-    const bgGain = ctx.createGain();
-    bgGain.gain.value = mixVol;
-    bgSrc.connect(bgGain); bgGain.connect(dest);
-    bgSrc.start(t0);
-  } else if(state.masterBuffer){
-    usedFallback = true;
-    const bgSrc = ctx.createBufferSource();
-    bgSrc.buffer = state.masterBuffer;
-    const bgGain = ctx.createGain();
-    bgGain.gain.value = mixVol;
-    bgSrc.connect(bgGain); bgGain.connect(dest);
-    bgSrc.start(t0);
-  }
-  
-  // Foreground per line: recorded take(s) if present, otherwise fall back to
-  // the original full audio for that line so it isn't silent.
-  state.fragments.forEach(f => {
-    const takes = state.takes[f.id] || {};
-    const assignedWithTakes = f.assigned.filter(uid => takes[uid]);
-    if(assignedWithTakes.length > 0){
-      assignedWithTakes.forEach(uid => {
-        const src = ctx.createBufferSource();
-        src.buffer = takes[uid].buffer;
-        src.connect(dest);
-        src.start(t0 + f.start);
-      });
-    } else {
-      const seg = sliceMasterBuffer(f.start, f.end);
-      if(seg){
-        const src = ctx.createBufferSource();
-        src.buffer = seg;
-        src.connect(dest);
-        src.start(t0 + f.start);
-      }
+  try {
+    const ctx = ensureCtx();
+    if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
+    const dest = ctx.createMediaStreamDestination();
+    const vStream = v.captureStream ? v.captureStream() : v.mozCaptureStream();
+    const combined = new MediaStream([...vStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+    
+    const mimeOpts = ['video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'].find(m => {
+      try { return MediaRecorder.isTypeSupported(m); } catch(e){ return false; }
+    });
+    const recorder = new MediaRecorder(combined, mimeOpts ? { mimeType: mimeOpts } : undefined);
+    
+    const chunks = [];
+    recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+    const finished = new Promise(r => recorder.onstop = r);
+    
+    v.muted = true; v.currentTime = 0;
+    await new Promise(r => { v.onseeked = r; setTimeout(r, 300); });
+    
+    recorder.start();
+    const t0 = ctx.currentTime + 0.1;
+    const mixVol = parseInt(el('mixSlider').value, 10) / 100;
+    let usedFallback = false;
+    
+    if(state.backgroundBuffer){
+      const bgSrc = ctx.createBufferSource();
+      bgSrc.buffer = state.backgroundBuffer;
+      const bgGain = ctx.createGain();
+      bgGain.gain.value = mixVol;
+      bgSrc.connect(bgGain); bgGain.connect(dest);
+      bgSrc.start(t0);
+    } else if(state.masterBuffer){
+      usedFallback = true;
+      const bgSrc = ctx.createBufferSource();
+      bgSrc.buffer = state.masterBuffer;
+      const bgGain = ctx.createGain();
+      bgGain.gain.value = mixVol;
+      bgSrc.connect(bgGain); bgGain.connect(dest);
+      bgSrc.start(t0);
     }
-  });
-  
-  v.play();
-  const dur = state.duration || 1;
-  const timer = setInterval(() => {
-    el('renderProgressFill').style.width = Math.min(100, (v.currentTime/dur)*100) + '%';
-  }, 100);
-  
-  await new Promise(r => { v.onended = r; setTimeout(r, dur*1000 + 1000); });
-  clearInterval(timer); el('renderProgressFill').style.width = '100%';
-  recorder.stop();
-  await finished;
-  
-  const isMp4 = mimeOpts && mimeOpts.includes('mp4');
-  const blob = new Blob(chunks, { type: isMp4 ? 'video/mp4' : 'video/webm' });
-  el('downloadLink').href = URL.createObjectURL(blob);
-  el('downloadLink').download = isMp4 ? 'loop-booth-dub.mp4' : 'loop-booth-dub.webm';
-  el('downloadLink').classList.add('show');
-  el('renderBtn').disabled = false;
-  el('renderStatus').textContent = usedFallback
-    ? 'Done - mono source, so background bed includes the original voice too.'
-    : 'Done - background music/noise carried through with the voice removed.';
-  setTimeout(() => el('renderProgress').classList.remove('show'), 1000);
+    
+    state.fragments.forEach(f => {
+      const takes = state.takes[f.id] || {};
+      const assignedWithTakes = (f.assigned || []).filter(uid => takes[uid]);
+      if(assignedWithTakes.length > 0){
+        assignedWithTakes.forEach(uid => {
+          const src = ctx.createBufferSource();
+          src.buffer = takes[uid].buffer;
+          src.connect(dest);
+          src.start(t0 + f.start);
+        });
+      } else {
+        const seg = sliceMasterBuffer(f.start, f.end);
+        if(seg){
+          const src = ctx.createBufferSource();
+          src.buffer = seg;
+          src.connect(dest);
+          src.start(t0 + f.start);
+        }
+      }
+    });
+    
+    await v.play().catch(e => console.warn("Export playback warning:", e));
+    const dur = state.duration || 1;
+    const timer = setInterval(() => {
+      el('renderProgressFill').style.width = Math.min(100, (v.currentTime/dur)*100) + '%';
+    }, 100);
+    
+    await new Promise(r => { v.onended = r; setTimeout(r, dur*1000 + 1000); });
+    clearInterval(timer); el('renderProgressFill').style.width = '100%';
+    if(recorder.state !== 'inactive') recorder.stop();
+    await finished;
+    
+    const isMp4 = mimeOpts && mimeOpts.includes('mp4');
+    const blob = new Blob(chunks, { type: isMp4 ? 'video/mp4' : 'video/webm' });
+    el('downloadLink').href = URL.createObjectURL(blob);
+    el('downloadLink').download = isMp4 ? 'loop-booth-dub.mp4' : 'loop-booth-dub.webm';
+    el('downloadLink').classList.add('show');
+    el('renderBtn').disabled = false;
+    el('renderStatus').textContent = usedFallback
+      ? 'Done - mono source, background bed includes original voice.'
+      : 'Done - background audio carried through with voice removed.';
+    setTimeout(() => el('renderProgress').classList.remove('show'), 1000);
+    showNotice("Dub exported successfully! Click Download.", "success", 3500);
+  } catch(err) {
+    console.error("Export render error:", err);
+    showNotice("Failed to export dub: " + (err?.message || "Render error"), "error");
+    el('renderBtn').disabled = false;
+    el('renderProgress').classList.remove('show');
+  }
 };
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error("Unhandled promise rejection:", event.reason);
+  const reason = event.reason;
+  const msg = reason?.message || (typeof reason === 'string' ? reason : null);
+  if (msg && !msg.includes('interrupted by a call to pause()') && !msg.includes('play() request was interrupted') && !msg.includes('The play() request was aborted')) {
+    showNotice(msg.length > 95 ? msg.slice(0, 95) + '...' : msg, 'error');
+  }
+});
 

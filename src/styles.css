@@ -89,8 +89,10 @@
 
   .dropzone{
     margin-top:20px; padding: 24px 20px; border: 1.5px dashed var(--line); border-radius: 10px; background: var(--bg-well); cursor:pointer;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
   }
   .dropzone:hover{ border-color: var(--accent-dim); }
+  .dropzone.drag-over{ border-color: var(--accent); background: rgba(178, 133, 245, 0.08); }
   .sync-progress{ height:8px; margin-top:14px; overflow:hidden; background:var(--bg-well); border:1px solid var(--line); border-radius:999px; }
   .sync-progress-fill{ width:0; height:100%; background:var(--accent); transition:width .12s linear; }
   .sync-progress-text{ margin-top:6px; color:var(--accent); font-family:var(--font-mono); font-size:11px; text-align:right; }
@@ -336,8 +338,127 @@
     .mix-control input[type="range"]{ flex:1; max-width:180px; }
   }
 
-  .notice{ display:none; align-items:flex-start; gap:10px; background: rgba(214,88,74,0.1); border:1px solid var(--red-dim); color:#F0C4BC; border-radius: var(--radius-small); padding: 10px 13px; font-size:13px; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); max-width: 90vw; }
-  .notice.show{ display:flex; }
+  /* Fading Toast / Error Messages */
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    max-width: 90vw;
+    width: auto;
+    pointer-events: none;
+  }
+
+  .toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius-small);
+    font-size: 13px;
+    line-height: 1.4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px);
+    max-width: 480px;
+    animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    transition: opacity 0.38s ease, transform 0.38s ease;
+  }
+
+  .toast.toast-error {
+    background: rgba(38, 16, 14, 0.95);
+    border: 1px solid rgba(214, 88, 74, 0.45);
+    color: #F8D2CB;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 14px rgba(214, 88, 74, 0.2);
+  }
+  .toast.toast-error .toast-icon {
+    color: #E86A5A;
+  }
+
+  .toast.toast-warning {
+    background: rgba(40, 28, 14, 0.95);
+    border: 1px solid rgba(232, 163, 61, 0.45);
+    color: #FBE6C8;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 14px rgba(232, 163, 61, 0.2);
+  }
+  .toast.toast-warning .toast-icon {
+    color: #E8A33D;
+  }
+
+  .toast.toast-info {
+    background: rgba(28, 22, 38, 0.95);
+    border: 1px solid rgba(178, 133, 245, 0.45);
+    color: #E7D8FC;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 14px rgba(178, 133, 245, 0.2);
+  }
+  .toast.toast-info .toast-icon {
+    color: #B285F5;
+  }
+
+  .toast.toast-success {
+    background: rgba(18, 36, 24, 0.95);
+    border: 1px solid rgba(16, 185, 129, 0.45);
+    color: #D1FAE5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 14px rgba(16, 185, 129, 0.2);
+  }
+  .toast.toast-success .toast-icon {
+    color: #10B981;
+  }
+
+  .toast-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .toast-text {
+    flex: 1;
+    word-break: break-word;
+  }
+
+  .toast-close {
+    background: transparent;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 16px;
+    line-height: 1;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s ease;
+  }
+  .toast-close:hover {
+    opacity: 1;
+  }
+
+  .toast.fading-out {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.94);
+    pointer-events: none;
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes toastSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-14px) scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .notice{ display:none; }
   .sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 
   .mp-hint{ font-size: 11px; color: var(--text-faint); margin: -10px 0 16px; line-height: 1.4; }
