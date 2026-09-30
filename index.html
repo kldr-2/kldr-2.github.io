@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/src/styles.css">
+<link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 </div>
 
 <div id="setupScreen" class="screen active">
-  <span class="version-footer" aria-label="Application version">v1.0.4</span>
+  <span class="version-footer" aria-label="Application version">v1.0.5</span>
   <button class="btn btn-ghost" id="savedDubsBtn" style="position: absolute; bottom: 20px; right: 20px; font-size: 13px;">Saved Dubs</button>
   <div class="setup-card">
     <div style="display:flex; justify-content:center; gap:10px; margin-bottom: 20px;">
@@ -135,9 +135,10 @@
       <div class="studio-player-list" id="studioPlayerList"></div>
     </div>
     <div class="topbar-right">
-      <div class="mix-control" title="How loud the clip's original background (music/noise, voice removed) plays under your dub">
-        <label for="mixSlider">Background:</label>
-        <input type="range" id="mixSlider" min="0" max="100" value="65">
+      <div class="mix-control" title="Volume: controls video audio when listening to the original, and background bed volume under your dubs">
+        <label for="mixSlider">Volume:</label>
+        <input type="range" id="mixSlider" min="0" max="100" value="65" aria-label="Playback and background volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="65">
+        <span class="mix-val" id="mixVal">65%</span>
       </div>
     </div>
   </div>
@@ -209,7 +210,7 @@
 
 
 
-<script type="module" src="/src/app.js"></script>
+<script type="module" src="./src/app.js"></script>
 </body>
 </html>
 

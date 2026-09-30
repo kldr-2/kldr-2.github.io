@@ -1,6 +1,6 @@
 
 import { createMultiplayerClient } from './network.js';
-import { initAsteroidsBackground, startAsteroids, stopAsteroids } from './asteroidsBackground.js';
+import { initAsteroidsBackground, startAsteroids, stopAsteroids, setAsteroidPlayerColors } from './asteroidsBackground.js';
 
 const appId = 'loop-booth-mp';
 const multiplayer = createMultiplayerClient();
@@ -36,6 +36,7 @@ const state = {
   envelope: null,
   masterBuffer: null,
   backgroundBuffer: null, // vocal-reduced version of masterBuffer, for the continuous background bed
+  backgroundVolume: 0.65,
   
   // Studio state
   fragments: [],  // synced from roomData.fragments
@@ -214,6 +215,13 @@ if (typeof document !== 'undefined') {
       }
     };
   }
+
+  const mixSlider = el('mixSlider');
+  if (mixSlider) {
+    mixSlider.oninput = () => updateMixSliderDisplay();
+    mixSlider.onchange = () => updateMixSliderDisplay();
+    updateMixSliderDisplay();
+  }
 }
 
 function isSoloSession() {
@@ -272,6 +280,7 @@ function resetToMenu() {
     el('laneScoreBadge').className = 'lane-score-badge';
   }
   
+  setAsteroidPlayerColors([PLAYER_COLORS[0]]);
   switchScreen('setupScreen');
 }
 
@@ -305,11 +314,7 @@ function switchScreen(id){
     if (el(id)) el(id).classList.add('active');
   }
 
-  if (id === 'studioScreen') {
-    stopAsteroids();
-  } else {
-    startAsteroids();
-  }
+  startAsteroids();
 }
 
 function ensureCtx(){
@@ -340,6 +345,10 @@ async function authenticate(){
 }
 
 function renderLobbyPlayers(players, hostId){
+  if (Array.isArray(players)) {
+    const colors = players.map(p => p?.color).filter(Boolean);
+    setAsteroidPlayerColors(colors);
+  }
   el('lobbyPlayerList').innerHTML = players.map(player => {
     const progress = Number.isFinite(player.syncProgress) ? player.syncProgress : 0;
     const isSyncing = !player.ready && progress > 0;
@@ -365,6 +374,7 @@ if (el('singleplayerBtn')) {
     state.isHost = true;
     state.roomId = 'LOCAL';
     state.me = { id: state.uid, name: 'You', color: PLAYER_COLORS[0], ready: true };
+    setAsteroidPlayerColors([PLAYER_COLORS[0]]);
     state.roomData = {
       id: 'LOCAL',
       hostId: state.uid,
@@ -731,6 +741,7 @@ async function enterStudio(){
   }
   
   renderStudioPlayerList();
+  updateMixSliderDisplay();
   
   el('editToggleInput').disabled = !state.isHost;
   el('undoBtn').style.display = state.isHost ? 'inline-flex' : 'none';
@@ -1123,6 +1134,10 @@ function renderStudioPlayerList(){
   const container = el('studioPlayerList');
   if(!container) return;
   const players = state.roomData?.players || (state.me ? [state.me] : []);
+  if (Array.isArray(players)) {
+    const colors = players.map(p => p?.color).filter(Boolean);
+    setAsteroidPlayerColors(colors);
+  }
   const hostId = state.roomData?.hostId;
 
   container.innerHTML = players.map(p => {
@@ -1876,11 +1891,51 @@ function handleRoomEvent(event){
   }
 }
 
+function getMixVolume(){
+  const slider = el('mixSlider');
+  if(!slider) return (state.backgroundVolume !== undefined ? state.backgroundVolume : 0.65);
+  const val = parseFloat(slider.value);
+  const normalized = isNaN(val) ? 0.65 : Math.max(0, Math.min(1, val / 100));
+  state.backgroundVolume = normalized;
+  return normalized;
+}
+
+function updateMixSliderDisplay(){
+  const slider = el('mixSlider');
+  const label = el('mixVal');
+  if(!slider) return;
+  const vol = getMixVolume();
+  if(label) label.textContent = `${Math.round(vol * 100)}%`;
+  slider.setAttribute('aria-valuenow', Math.round(vol * 100));
+  
+  const v = el('mainVideo');
+  if(v && (!state.pb || !state.pb.remote)){
+    // Update video element volume in real-time whenever not recording
+    const isRecording = state.pb && state.pb.mode === 'record';
+    const isReviewWithBg = state.pb && state.pb.mode === 'review' && Boolean(state.pb.bgGain);
+    
+    if(!isRecording && !isReviewWithBg){
+      v.muted = (vol < 0.001);
+      v.volume = vol;
+    }
+  }
+
+  // Real-time audio gain adjustment for Web Audio review playback
+  if(state.pb && state.isPlaying && !state.paused){
+    const ctx = ensureCtx();
+    if(state.pb.bgGain){
+      state.pb.bgGain.gain.setValueAtTime(vol, ctx.currentTime);
+    }
+  }
+}
+
 function startReviewSources(pb, offsetSeconds){
   const ctx = ensureCtx();
   if(ctx.state === 'suspended') ctx.resume().catch(() => {});
   const takes = state.takes[pb.frag.id] || {};
   pb.sources = [];
+  
+  // 1. Play recorded takes for this line
   const allTakeUids = new Set([...(pb.frag.assigned || []), ...Object.keys(takes)]);
   allTakeUids.forEach(uid => {
     if(takes[uid] && takes[uid].buffer){
@@ -1892,6 +1947,44 @@ function startReviewSources(pb, offsetSeconds){
       pb.sources.push(src);
     }
   });
+
+  // 2. Play vocal-reduced background bed under the dub
+  const bgBuffer = state.backgroundBuffer || state.masterBuffer;
+  const mixVol = getMixVolume();
+  const v = el('mainVideo');
+
+  if(bgBuffer && mixVol > 0.001){
+    try {
+      const bgSrc = ctx.createBufferSource();
+      bgSrc.buffer = bgBuffer;
+      const bgGain = ctx.createGain();
+      bgGain.gain.setValueAtTime(mixVol, ctx.currentTime);
+      bgSrc.connect(bgGain).connect(ctx.destination);
+      
+      const bufferStart = Math.max(0, pb.frag.start + offsetSeconds);
+      const remainingDur = Math.max(0.01, pb.frag.end - (pb.frag.start + offsetSeconds));
+      
+      if(bufferStart < bgBuffer.duration){
+        bgSrc.start(0, bufferStart, remainingDur);
+        pb.sources.push(bgSrc);
+        pb.bgGain = bgGain;
+        pb.bgSource = bgSrc;
+      }
+      if(v) v.muted = true;
+    } catch(bgErr) {
+      console.warn("Could not start WebAudio background bed, falling back to video audio:", bgErr);
+      if(v && !pb.remote){
+        v.muted = (mixVol < 0.01);
+        v.volume = mixVol;
+      }
+    }
+  } else if(!bgBuffer && v && !pb.remote){
+    v.muted = (mixVol < 0.01);
+    v.volume = mixVol;
+  } else {
+    if(v) v.muted = true;
+  }
+
   pb.sourcesStartedAtCtxTime = ctx.currentTime;
   pb.sourcesOffsetAtStart = offsetSeconds;
 }
@@ -1935,9 +2028,19 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
     }
   }
 
-  const mixVol = parseInt(el('mixSlider').value, 10) / 100;
-  v.muted = isRemote || mode === 'record';
-  v.volume = isRemote || mode === 'record' ? 0 : mixVol;
+  const mixVol = getMixVolume();
+  const hasBgBuffer = Boolean(state.backgroundBuffer || state.masterBuffer);
+  if (isRemote || mode === 'record') {
+    v.muted = true;
+    v.volume = 0;
+  } else if (mode === 'review') {
+    v.muted = hasBgBuffer || (mixVol < 0.001);
+    v.volume = mixVol;
+  } else {
+    // 'original' mode (listening to original clip)
+    v.muted = (mixVol < 0.001);
+    v.volume = mixVol;
+  }
   v.playbackRate = 1;
   try {
     v.currentTime = f.start;
@@ -2002,7 +2105,8 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
     if(!isRemote) broadcastMyActivity('reviewing', f.id, state.currentIndex);
   } else {
-    v.volume = isRemote ? 0 : 1.0;
+    v.muted = isRemote || (mixVol < 0.001);
+    v.volume = isRemote ? 0 : mixVol;
     el('monitorBadgeText').textContent = remoteLabel || "Original"; el('monitorBadge').classList.toggle('live', Boolean(remoteLabel));
     if(!isRemote) broadcastMyActivity('listening', f.id, state.currentIndex);
   }
@@ -2087,6 +2191,8 @@ function pausePlayback(isRemote = false){
     pb.sourcesOffsetAtStart = pb.sourcesOffsetAtStart + elapsed;
     pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
     pb.sources = [];
+    pb.bgGain = null;
+    pb.bgSource = null;
   }
   el('monitorBadgeText').textContent = "Paused"; el('monitorBadge').classList.remove('live');
   setPauseButton('paused');
@@ -2110,6 +2216,9 @@ function resumePlayback(isRemote = false){
     el('monitorBadgeText').textContent = "Playing Takes"; el('monitorBadge').classList.remove('live');
     if(!isRemote) broadcastMyActivity('reviewing', pb?.frag?.id, state.currentIndex);
   } else {
+    const vol = getMixVolume();
+    v.muted = isRemote || (vol < 0.001);
+    v.volume = isRemote ? 0 : vol;
     el('monitorBadgeText').textContent = "Original"; el('monitorBadge').classList.remove('live');
     if(!isRemote) broadcastMyActivity('listening', pb?.frag?.id, state.currentIndex);
   }
@@ -2141,6 +2250,8 @@ function finishPlayback(isRemote = false){
   if(pb){
     if(pb.syncTimer) clearInterval(pb.syncTimer);
     pb.sources && pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
+    pb.bgGain = null;
+    pb.bgSource = null;
     if(pb.mode === 'record' && pb.recorder){
       const fragId = pb.frag.id;
       const trace = [...state.liveTrace];
@@ -2235,6 +2346,8 @@ function stopPlayback(isRemote = false){
   if(pb){
     if(pb.syncTimer) clearInterval(pb.syncTimer);
     pb.sources && pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
+    pb.bgGain = null;
+    pb.bgSource = null;
     if(pb.recorder && pb.recorder.state !== 'inactive'){
       try{ pb.recorder.stop(); }catch(e){}
     }
@@ -2345,7 +2458,7 @@ if (el('renderBtn')) {
     
     recorder.start();
     const t0 = ctx.currentTime + 0.1;
-    const mixVol = parseInt(el('mixSlider').value, 10) / 100;
+    const mixVol = getMixVolume();
     let usedFallback = false;
     
     if(state.backgroundBuffer){
