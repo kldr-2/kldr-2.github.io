@@ -1,6 +1,20 @@
 
 import { createMultiplayerClient } from './network.js';
-import { initAsteroidsBackground, startAsteroids, stopAsteroids } from './asteroidsBackground.js';
+import { initAsteroidsBackground, startAsteroids, stopAsteroids, setAsteroidsMode } from './asteroidsBackground.js';
+import { settings } from './settings.js';
+import { normalizeAudioBuffer, calculatePeak, linearToDb } from './audioNormalizer.js';
+import {
+  saveLastWorkedLobby,
+  getLastWorkedLobby,
+  saveCompletedDub,
+  getAllSavedDubs,
+  deleteSavedDub,
+  clearAllSavedDubs,
+  formatDateString,
+  formatDurationMinSec,
+  formatFileSize,
+  extractCollaborators
+} from './savedDubsStore.js';
 
 const appId = 'loop-booth-mp';
 const multiplayer = createMultiplayerClient();
@@ -10,6 +24,9 @@ let firebaseModules = null;
 
 if (typeof document !== 'undefined') {
   initAsteroidsBackground('bgAsteroids');
+  if (settings.get('asteroidsMode')) {
+    setAsteroidsMode(settings.get('asteroidsMode'));
+  }
 }
 
 async function loadFirebase(){
@@ -62,6 +79,161 @@ const state = {
 };
 
 const el = (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null);
+
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function getAnonymousPlayerName(slotIndex = 0) {
+  const num = Math.min(4, Math.max(1, (slotIndex || 0) + 1));
+  return `anon${num}`;
+}
+
+function formatTimeSecTenths(sec) {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0;
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  const tenths = Math.floor((sec % 1) * 10);
+  return `${m}:${String(s).padStart(2, '0')}.${tenths}`;
+}
+
+function formatTimecode(sec) {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0;
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  const tenths = Math.floor((sec % 1) * 10);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${tenths}`;
+}
+
+function updateMasterFragmentsDuration() {
+  const valEl = el('masterFragmentsTotalDurationVal');
+  if (!valEl) return;
+  const frags = Array.isArray(state.fragments) ? state.fragments : [];
+  const totalSec = frags.reduce((sum, f) => {
+    const start = Number(f?.start);
+    const end = Number(f?.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return sum;
+    return sum + Math.max(0, end - start);
+  }, 0);
+  valEl.textContent = formatTimecode(totalSec);
+}
+
+/**
+ * Creates a smooth progress stepper that advances strictly 1 percentage point at a time
+ * without jumping, even when network or compute progress completes quickly or in large bursts.
+ */
+function createProgressStepper({
+  fillEl = null,
+  textEl = null,
+  textSuffix = '%',
+  textPrefix = '',
+  initial = 0,
+  minStepMs = 6,
+  maxStepMs = 15,
+  onStep = null,
+  onComplete = null
+} = {}) {
+  let current = Math.max(0, Math.min(100, Math.round(initial)));
+  let target = current;
+  let active = true;
+  let timer = null;
+  let completionResolvers = [];
+
+  function render(val) {
+    if (fillEl) {
+      fillEl.style.width = `${val}%`;
+    }
+    if (textEl) {
+      textEl.textContent = `${textPrefix}${val}${textSuffix}`;
+    }
+    if (typeof onStep === 'function') {
+      try { onStep(val); } catch (_) {}
+    }
+  }
+
+  render(current);
+
+  function notifyComplete() {
+    if (typeof onComplete === 'function') {
+      try { onComplete(); } catch (_) {}
+    }
+    const resolvers = completionResolvers.slice(0);
+    completionResolvers = [];
+    resolvers.forEach(r => {
+      try { r(); } catch (_) {}
+    });
+  }
+
+  function tick() {
+    if (!active) return;
+    if (current < target) {
+      current += 1;
+      render(current);
+
+      if (current >= 100 && target >= 100) {
+        timer = null;
+        notifyComplete();
+        return;
+      }
+    } else if (current >= target && target >= 100) {
+      timer = null;
+      notifyComplete();
+      return;
+    }
+
+    if (current < target) {
+      const gap = target - current;
+      // When gap is large, step at minimum interval; otherwise smooth cruising speed
+      const delay = gap > 40 ? minStepMs : (gap > 15 ? Math.round((minStepMs + maxStepMs) / 2) : maxStepMs);
+      timer = setTimeout(tick, delay);
+    } else {
+      timer = null;
+    }
+  }
+
+  return {
+    get current() {
+      return current;
+    },
+    get target() {
+      return target;
+    },
+    setTarget(newTarget) {
+      if (!active) return;
+      const clamped = Math.max(0, Math.min(100, Math.round(newTarget)));
+      if (clamped > target) {
+        target = clamped;
+        if (!timer && current < target) {
+          tick();
+        }
+      }
+    },
+    async finish(targetPct = 100) {
+      if (!active) return;
+      target = Math.max(target, Math.min(100, Math.round(targetPct)));
+      if (current >= target) {
+        render(target);
+        return;
+      }
+      return new Promise((resolve) => {
+        completionResolvers.push(resolve);
+        if (!timer) tick();
+      });
+    },
+    setImmediate(val) {
+      current = Math.max(0, Math.min(100, Math.round(val)));
+      target = current;
+      if (timer) { clearTimeout(timer); timer = null; }
+      render(current);
+    },
+    stop() {
+      active = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+      notifyComplete();
+    }
+  };
+}
 
 function showNotice(msg, type = 'error', durationMs = 4200){
   const container = el('toastContainer');
@@ -170,20 +342,463 @@ if (typeof document !== 'undefined') {
     }
   };
 
+  // Settings Modal Controller & Helpers
+  function openSettingsModal() {
+    syncSettingsUI();
+    if (el('settingsModal')) {
+      el('settingsModal').classList.add('active');
+    }
+  }
+
+  function closeSettingsModal() {
+    if (el('settingsModal')) {
+      el('settingsModal').classList.remove('active');
+    }
+  }
+
+  function updateNormBadge() {
+    const badge = el('studioNormBadge');
+    if (!badge) return;
+    const isAutoNorm = Boolean(settings.get('autoNormalize'));
+    const targetDb = settings.get('targetPeakDb');
+    if (isAutoNorm) {
+      badge.textContent = `Norm: ${targetDb} dBFS`;
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.textContent = 'Norm: Off';
+      badge.style.display = 'inline-flex';
+      badge.style.opacity = '0.6';
+    }
+  }
+
+  function syncSettingsUI() {
+    const autoNorm = Boolean(settings.get('autoNormalize'));
+    if (el('settingAutoNorm')) el('settingAutoNorm').checked = autoNorm;
+    if (el('normStatusBadge')) {
+      el('normStatusBadge').textContent = autoNorm ? 'Active' : 'Off';
+      el('normStatusBadge').classList.toggle('active', autoNorm);
+    }
+
+    if (el('settingTargetPeak')) {
+      el('settingTargetPeak').value = String(settings.get('targetPeakDb'));
+    }
+    if (el('settingSilenceFloor')) {
+      el('settingSilenceFloor').value = String(settings.get('silenceThresholdDb'));
+    }
+
+    const shortcutsEnabled = Boolean(settings.get('keyboardShortcuts'));
+    if (el('settingShortcutsToggle')) el('settingShortcutsToggle').checked = shortcutsEnabled;
+    if (el('shortcutsBadge')) {
+      el('shortcutsBadge').textContent = shortcutsEnabled ? 'Enabled' : 'Disabled';
+      el('shortcutsBadge').classList.toggle('active', shortcutsEnabled);
+    }
+
+    const keyHints = Boolean(settings.get('showKeyHints'));
+    if (el('settingKeyHintsToggle')) el('settingKeyHintsToggle').checked = keyHints;
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('hide-key-hints', !keyHints);
+    }
+
+    const latency = settings.get('micLatencyMs') ?? 0;
+    if (el('settingLatencyRange')) el('settingLatencyRange').value = String(latency);
+    if (el('settingLatencyVal')) el('settingLatencyVal').textContent = `${latency > 0 ? '+' : ''}${latency} ms`;
+
+    if (el('settingAutoAdvance')) el('settingAutoAdvance').checked = Boolean(settings.get('autoAdvance'));
+    if (el('settingShowSubtitles')) el('settingShowSubtitles').checked = Boolean(settings.get('showSubtitles'));
+    const astMode = settings.get('asteroidsMode') || 'glow';
+    if (el('settingAsteroidsMode')) el('settingAsteroidsMode').value = astMode;
+    updateMonitorSubtitle();
+
+    if (el('diagRoomCode')) {
+      el('diagRoomCode').textContent = state.roomId || (state.isSingleplayer ? 'SOLO-OFFLINE' : 'LOCAL');
+    }
+    if (el('diagRole')) {
+      el('diagRole').textContent = state.isSingleplayer ? 'Solo Dubber' : (state.isHost ? 'Host' : 'Guest Dubber');
+    }
+    if (el('diagNetwork')) {
+      el('diagNetwork').textContent = state.isSingleplayer ? 'Local (Offline)' : 'WebSocket Mesh (Live)';
+    }
+    if (el('diagTakesCount')) {
+      let totalTakes = 0;
+      for (const fragId in state.takes) {
+        totalTakes += Object.keys(state.takes[fragId] || {}).length;
+      }
+      el('diagTakesCount').textContent = `${totalTakes} recorded`;
+    }
+
+    updateNormBadge();
+  }
+
+  function reNormalizeAllTakes(showToast = true) {
+    const targetDb = Number(settings.get('targetPeakDb')) || -1.0;
+    const silenceFloor = Number(settings.get('silenceThresholdDb')) || -42;
+    const ctx = ensureCtx();
+    let count = 0;
+
+    for (const fragId in state.takes) {
+      const fragTakes = state.takes[fragId];
+      if (!fragTakes) continue;
+      for (const uid in fragTakes) {
+        const takeObj = fragTakes[uid];
+        if (takeObj && takeObj.buffer) {
+          const norm = normalizeAudioBuffer(ctx, takeObj.buffer, targetDb, { silenceThresholdDb: silenceFloor });
+          takeObj.buffer = norm.buffer;
+          takeObj.normalized = true;
+          takeObj.normalizedDb = norm.normalizedPeakDb;
+          count++;
+        }
+      }
+    }
+
+    renderFragmentList();
+    renderMasterCanvas();
+    if (state.fragments[state.currentIndex]) {
+      drawWave(state.fragments[state.currentIndex]);
+      updateLaneScoreDisplay(state.fragments[state.currentIndex]);
+    }
+
+    if (showToast) {
+      if (count > 0) {
+        showNotice(`Normalized ${count} take${count > 1 ? 's' : ''} to ${targetDb} dBFS.`, "success", 3000);
+      } else {
+        showNotice(`Target output level set to ${targetDb} dBFS. Takes will auto-normalize as you record!`, "info", 3000);
+      }
+    }
+  }
+
+  // Bind settings modal controls
+  if (el('settingsBtnSetup')) el('settingsBtnSetup').onclick = openSettingsModal;
+  if (el('settingsBtnMp')) el('settingsBtnMp').onclick = openSettingsModal;
+  if (el('settingsBtnLobby')) el('settingsBtnLobby').onclick = openSettingsModal;
+  if (el('settingsBtnStudio')) el('settingsBtnStudio').onclick = openSettingsModal;
+  if (el('settingsCloseBtn')) el('settingsCloseBtn').onclick = closeSettingsModal;
+  if (el('settingsDoneBtn')) el('settingsDoneBtn').onclick = closeSettingsModal;
+
+  const settingsModalEl = el('settingsModal');
+  if (settingsModalEl) {
+    settingsModalEl.onclick = (e) => {
+      if (e.target === settingsModalEl) closeSettingsModal();
+    };
+  }
+
+  if (el('settingAutoNorm')) {
+    el('settingAutoNorm').onchange = () => {
+      const enabled = Boolean(el('settingAutoNorm').checked);
+      settings.set('autoNormalize', enabled);
+      syncSettingsUI();
+      if (enabled) {
+        reNormalizeAllTakes(false);
+        showNotice("Auto-normalization active. Recorded takes will have consistent volume.", "info", 2600);
+      } else {
+        showNotice("Auto-normalization disabled.", "info", 2000);
+      }
+    };
+  }
+
+  if (el('settingTargetPeak')) {
+    el('settingTargetPeak').onchange = () => {
+      const val = parseFloat(el('settingTargetPeak').value);
+      settings.set('targetPeakDb', val);
+      syncSettingsUI();
+      if (settings.get('autoNormalize')) {
+        reNormalizeAllTakes(false);
+        showNotice(`Target output level updated to ${val} dBFS.`, "info", 2200);
+      }
+    };
+  }
+
+  if (el('settingSilenceFloor')) {
+    el('settingSilenceFloor').onchange = () => {
+      const val = parseFloat(el('settingSilenceFloor').value);
+      settings.set('silenceThresholdDb', val);
+      syncSettingsUI();
+    };
+  }
+
+  if (el('settingRenormalizeBtn')) {
+    el('settingRenormalizeBtn').onclick = () => reNormalizeAllTakes(true);
+  }
+
+  if (el('settingShortcutsToggle')) {
+    el('settingShortcutsToggle').onchange = () => {
+      const enabled = Boolean(el('settingShortcutsToggle').checked);
+      settings.set('keyboardShortcuts', enabled);
+      syncSettingsUI();
+      showNotice(
+        enabled ? "Keyboard shortcuts enabled (Space, R, L, P, arrows)." : "Keyboard shortcuts disabled.",
+        "info",
+        2200
+      );
+    };
+  }
+
+  if (el('settingKeyHintsToggle')) {
+    el('settingKeyHintsToggle').onchange = () => {
+      const enabled = Boolean(el('settingKeyHintsToggle').checked);
+      settings.set('showKeyHints', enabled);
+      syncSettingsUI();
+    };
+  }
+
+  if (el('settingLatencyRange')) {
+    el('settingLatencyRange').oninput = () => {
+      const val = parseInt(el('settingLatencyRange').value, 10);
+      settings.set('micLatencyMs', val);
+      if (el('settingLatencyVal')) el('settingLatencyVal').textContent = `${val > 0 ? '+' : ''}${val} ms`;
+    };
+  }
+
+  if (el('settingAutoAdvance')) {
+    el('settingAutoAdvance').onchange = () => {
+      settings.set('autoAdvance', Boolean(el('settingAutoAdvance').checked));
+    };
+  }
+
+  if (el('settingShowSubtitles')) {
+    el('settingShowSubtitles').onchange = () => {
+      const enabled = Boolean(el('settingShowSubtitles').checked);
+      settings.set('showSubtitles', enabled);
+      updateMonitorSubtitle();
+      showNotice(
+        enabled ? "Playing fragment subtitles enabled." : "Playing fragment subtitles hidden.",
+        "info",
+        2200
+      );
+    };
+  }
+
+  if (el('settingAsteroidsMode')) {
+    el('settingAsteroidsMode').onchange = () => {
+      const mode = el('settingAsteroidsMode').value;
+      settings.set('asteroidsMode', mode);
+      setAsteroidsMode(mode);
+    };
+  }
+
+  if (el('settingsResetBtn')) {
+    el('settingsResetBtn').onclick = () => {
+      settings.reset();
+      setAsteroidsMode('glow');
+      syncSettingsUI();
+      updateMonitorSubtitle();
+      showNotice("Settings reset to defaults.", "info", 2400);
+    };
+  }
+
+  const advancedToggleBtn = el('advancedToggleBtn');
+  const advancedSettingsDrawer = el('advancedSettingsDrawer');
+  const advancedArrow = el('advancedArrow');
+  if (advancedToggleBtn && advancedSettingsDrawer) {
+    advancedToggleBtn.onclick = () => {
+      const isOpen = advancedSettingsDrawer.classList.toggle('is-open');
+      advancedToggleBtn.classList.toggle('is-open', isOpen);
+      if (advancedArrow) {
+        advancedArrow.innerHTML = isOpen ? '&#x25B2;' : '&#x25BC;';
+      }
+      advancedToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    };
+  }
+
+  // Initialize UI state from saved settings
+  syncSettingsUI();
+
+  // Check if user opened an invite link (?room=CODE or ?r=CODE)
+  function checkUrlInvite() {
+    if (typeof window === 'undefined' || !window.location) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const code = (params.get('room') || params.get('r') || '').trim().toUpperCase();
+      if (code && /^[A-Z0-9]{3,8}$/.test(code)) {
+        if (el('roomCodeInput')) el('roomCodeInput').value = code;
+        switchScreen('multiplayerScreen');
+        showNotice(`Invited to room ${code}! Enter your name and click Join.`, "info", 5000);
+        setTimeout(() => {
+          el('playerNameInput')?.focus();
+        }, 250);
+      }
+    } catch (err) {
+      console.warn("URL invite check error:", err);
+    }
+  }
+  checkUrlInvite();
+
+  // Global Keyboard Shortcuts
   if (typeof window !== 'undefined') {
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && el('confirmModal')?.classList.contains('active')) {
-        el('confirmModal').classList.remove('active');
-        confirmCallback = null;
+      // 1. If currently typing inside any input or editable field, never intercept typing
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable;
+      if (isInput) {
+        if (e.key === 'Escape') {
+          document.activeElement.blur();
+        }
+        return;
+      }
+
+      // 2. Escape closes modals or stops playback
+      if (e.key === 'Escape') {
+        if (el('settingsModal')?.classList.contains('active')) {
+          closeSettingsModal();
+          return;
+        }
+        if (el('confirmModal')?.classList.contains('active')) {
+          el('confirmModal').classList.remove('active');
+          confirmCallback = null;
+          return;
+        }
+        if (state.isPlaying) {
+          stopPlayback();
+          return;
+        }
+      }
+
+      // 3. Toggle Settings Modal ('s', 'S', or '?')
+      if (e.key === 's' || e.key === 'S' || e.key === '?') {
+        e.preventDefault();
+        if (el('settingsModal')?.classList.contains('active')) {
+          closeSettingsModal();
+        } else {
+          openSettingsModal();
+        }
+        return;
+      }
+
+      // 4. Check if keyboard shortcuts are enabled by user in settings
+      if (!settings.get('keyboardShortcuts')) return;
+
+      const studioActive = el('studioScreen')?.classList.contains('active');
+
+      // Space: Play Takes / Pause / Resume
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (studioActive) {
+          if (state.isPlaying) {
+            if (state.pb?.mode === 'record') {
+              finishPlayback();
+            } else {
+              if (el('pauseBtn') && !el('pauseBtn').disabled) el('pauseBtn').click();
+            }
+          } else if (state.paused) {
+            if (el('pauseBtn') && !el('pauseBtn').disabled) el('pauseBtn').click();
+          } else {
+            const f = state.fragments[state.currentIndex];
+            const takes = f ? (state.takes[f.id] || {}) : {};
+            if (Object.keys(takes).length > 0 && el('reviewBtn') && !el('reviewBtn').disabled) {
+              el('reviewBtn').click();
+            } else if (el('listenBtn') && !el('listenBtn').disabled) {
+              el('listenBtn').click();
+            }
+          }
+        }
+        return;
+      }
+
+      // R: Record Take (or stop recording)
+      if (e.code === 'KeyR') {
+        if (studioActive) {
+          e.preventDefault();
+          if (state.isPlaying && state.pb?.mode === 'record') {
+            finishPlayback();
+          } else if (el('recordBtn') && !el('recordBtn').disabled) {
+            el('recordBtn').click();
+          }
+        }
+        return;
+      }
+
+      // L: Listen Original
+      if (e.code === 'KeyL') {
+        if (studioActive && el('listenBtn') && !el('listenBtn').disabled) {
+          e.preventDefault();
+          el('listenBtn').click();
+        }
+        return;
+      }
+
+      // P: Pause / Resume
+      if (e.code === 'KeyP') {
+        if (studioActive && el('pauseBtn') && !el('pauseBtn').disabled) {
+          e.preventDefault();
+          el('pauseBtn').click();
+        }
+        return;
+      }
+
+      // Left Arrow / '[' : Previous Line
+      if (e.code === 'ArrowLeft' || e.code === 'BracketLeft') {
+        if (studioActive && el('prevFragBtn') && !el('prevFragBtn').disabled) {
+          e.preventDefault();
+          el('prevFragBtn').click();
+        }
+        return;
+      }
+
+      // Right Arrow / ']' : Next Line
+      if (e.code === 'ArrowRight' || e.code === 'BracketRight') {
+        if (studioActive && el('nextFragBtn') && !el('nextFragBtn').disabled) {
+          e.preventDefault();
+          el('nextFragBtn').click();
+        }
+        return;
+      }
+
+      // U: Undo (Host)
+      if (e.code === 'KeyU') {
+        if (studioActive && state.isHost && el('undoBtn') && !el('undoBtn').disabled) {
+          e.preventDefault();
+          el('undoBtn').click();
+        }
+        return;
+      }
+
+      // E: Toggle Edit Splits (Host)
+      if (e.code === 'KeyE') {
+        if (studioActive && state.isHost) {
+          const editInput = el('editToggleInput');
+          if (editInput) {
+            e.preventDefault();
+            editInput.checked = !editInput.checked;
+            editInput.dispatchEvent(new Event('change'));
+          }
+        }
+        return;
+      }
+
+      // 1-9 Number keys to jump directly to line
+      if (/^Digit[1-9]$/.test(e.code)) {
+        if (studioActive) {
+          const idx = parseInt(e.key, 10) - 1;
+          if (idx >= 0 && idx < state.fragments.length) {
+            e.preventDefault();
+            selectFragment(idx);
+          }
+        }
+        return;
       }
     });
   }
 
   const savedDubsBtn = el('savedDubsBtn');
-  if (savedDubsBtn) savedDubsBtn.onclick = () => switchScreen('savedDubsScreen');
+  if (savedDubsBtn) {
+    savedDubsBtn.onclick = () => {
+      renderSavedDubsScreen();
+      switchScreen('savedDubsScreen');
+    };
+  }
 
   const savedDubsBackBtn = el('savedDubsBackBtn');
   if (savedDubsBackBtn) savedDubsBackBtn.onclick = () => switchScreen('setupScreen');
+
+  const clearSavedDubsBtn = el('clearSavedDubsBtn');
+  if (clearSavedDubsBtn) {
+    clearSavedDubsBtn.onclick = () => {
+      showConfirm("Clear Saved History?", "Are you sure you want to clear your saved dubs history and last active lobby?", () => {
+        clearAllSavedDubs();
+        renderSavedDubsScreen();
+        showNotice("Saved history cleared.", "info", 2000);
+      });
+    };
+  }
 
   const scoringToggle = el('scoringToggle');
   if (scoringToggle) {
@@ -199,6 +814,8 @@ if (typeof document !== 'undefined') {
         "info",
         2400
       );
+
+      persistCurrentSession();
 
       if (!isSoloSession() && state.isHost && state.roomId) {
         sendPlaybackEvent({ action: 'toggle-scoring', scoringMode: state.scoringMode });
@@ -216,11 +833,305 @@ if (typeof document !== 'undefined') {
   }
 }
 
+function persistCurrentSession() {
+  if (!state.roomId && !state.isSingleplayer) return;
+  try {
+    saveLastWorkedLobby({
+      roomId: state.roomId,
+      isSingleplayer: Boolean(state.isSingleplayer),
+      isHost: Boolean(state.isHost),
+      videoName: state.file?.name || state.videoSyncedName || 'Custom Video Clip',
+      videoSize: state.file?.size || null,
+      duration: state.duration || 0,
+      players: state.players || (state.me ? [state.me] : []),
+      scoringMode: Boolean(state.scoringMode),
+      audioNormalized: Boolean(settings.get('autoNormalize')),
+      fragments: state.fragments,
+      takes: state.takes,
+      uid: state.uid,
+      createdAt: state.sessionCreatedAt || Date.now()
+    });
+  } catch (e) {
+    console.warn("Session auto-persist error:", e);
+  }
+}
+
+function renderSavedDubsScreen() {
+  const container = el('savedDubsList');
+  if (!container) return;
+
+  const dubs = getAllSavedDubs();
+
+  if (!dubs || dubs.length === 0) {
+    container.innerHTML = `
+      <div class="dub-empty-card">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--accent); opacity:0.85;">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+        </svg>
+        <div style="font-size: 15.5px; font-weight: 600; color: var(--text);">No Saved Dubs or Recent Lobbies Yet</div>
+        <p style="font-size: 12.5px; color: var(--text-dim); max-width: 400px; margin: 0 auto; line-height: 1.45;">
+          Start a Solo practice or join a Multiplayer room. As you split lines, record takes, and export finished dubs, your work will be automatically saved here!
+        </p>
+        <button class="btn btn-primary" id="emptyStartSoloBtn" style="margin-top: 6px;">
+          Start Solo Session
+        </button>
+      </div>
+    `;
+    const btn = el('emptyStartSoloBtn');
+    if (btn) btn.onclick = () => {
+      switchScreen('setupScreen');
+      if (el('singleplayerBtn')) el('singleplayerBtn').click();
+    };
+    return;
+  }
+
+  container.innerHTML = dubs.map((dub, index) => {
+    const isTopLobby = Boolean(dub.isLastLobby || index === 0);
+    const dateFormatted = formatDateString(dub.updatedAt || dub.createdAt);
+    const durationFormatted = formatDurationMinSec(dub.duration);
+    const coverage = dub.coveragePercent || 0;
+    const linesTotal = dub.linesCount || 0;
+    const completedLines = dub.completedLines || (linesTotal > 0 && coverage ? Math.round((coverage / 100) * linesTotal) : 0);
+    const takesTotal = dub.takesCount || 0;
+    const isSolo = Boolean(dub.isSingleplayer);
+    const roomBadgeText = isSolo ? 'SOLO WORKSPACE' : `ROOM: ${dub.roomId || 'LOCAL'}`;
+    const scoreBadgeHtml = dub.scoringMode && dub.avgScore
+      ? `<span class="dub-stat-value" style="color:#FBBF24;">★ ${dub.avgScore}% Match</span>`
+      : `<span class="dub-stat-value" style="color:var(--text-dim);">Standard</span>`;
+    const normText = dub.audioNormalized ? 'Normalized (-1.0 dBFS)' : 'Standard Gain';
+
+    const collabs = Array.isArray(dub.collaborators) && dub.collaborators.length
+      ? dub.collaborators
+      : [{ name: isSolo ? 'Solo Dubber' : 'Room Host', color: '#B285F5', role: isSolo ? 'Solo Artist' : 'Host', takesCount: takesTotal }];
+
+    const collabsHtml = collabs.map(c => `
+      <span class="dub-collaborator-pill" title="${c.role}${c.takesCount ? ` • ${c.takesCount} takes` : ''}">
+        <span class="dub-collaborator-dot" style="background:${c.color || '#B285F5'};"></span>
+        <strong style="font-weight:600;">${escapeHtml(c.name || 'Dubber')}</strong>
+        <span style="color:var(--text-dim); font-size:10.5px;">(${c.role}${c.takesCount ? ` • ${c.takesCount} takes` : ''})</span>
+      </span>
+    `).join('');
+
+    const pinnedBadgeHtml = isTopLobby
+      ? `<div class="dub-card-pinned-tag">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          <span>LAST WORKED LOBBY (SAVED CONTENT)</span>
+        </div>`
+      : '';
+
+    return `
+      <div class="dub-card ${isTopLobby ? 'is-last-lobby' : ''}" data-id="${dub.id}">
+        ${pinnedBadgeHtml}
+        <div class="dub-card-header">
+          <div class="dub-card-title-group">
+            <div class="dub-card-title">
+              <span>${escapeHtml(dub.title || dub.videoName || 'Dub Session')}</span>
+              <span class="dub-room-badge">${roomBadgeText}</span>
+            </div>
+            <div class="dub-card-date">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>Saved ${dateFormatted}</span>
+              ${dub.videoSize ? `<span style="opacity:0.6;">• ${dub.videoSize}</span>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="dub-card-details-grid">
+          <div class="dub-stat-block">
+            <span class="dub-stat-label">Duration</span>
+            <span class="dub-stat-value">${durationFormatted}</span>
+          </div>
+          <div class="dub-stat-block">
+            <span class="dub-stat-label">Lines / Coverage</span>
+            <span class="dub-stat-value">${completedLines}/${linesTotal} lines (${coverage}%)</span>
+          </div>
+          <div class="dub-stat-block">
+            <span class="dub-stat-label">Takes Recorded</span>
+            <span class="dub-stat-value">${takesTotal} takes</span>
+          </div>
+          <div class="dub-stat-block">
+            <span class="dub-stat-label">Match Scoring</span>
+            ${scoreBadgeHtml}
+          </div>
+          <div class="dub-stat-block">
+            <span class="dub-stat-label">Audio Level</span>
+            <span class="dub-stat-value" style="font-size:11.5px; color:${dub.audioNormalized ? 'var(--green)' : 'var(--text-dim)'};">${normText}</span>
+          </div>
+        </div>
+
+        <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim); margin-bottom:6px; font-family:var(--font-mono);">
+          Collaborators & Dubbers:
+        </div>
+        <div class="dub-collaborators-row">
+          ${collabsHtml}
+        </div>
+
+        <div class="dub-card-actions">
+          <button class="btn btn-ghost btn-delete-dub" data-id="${dub.id}" style="font-size:12.5px; padding:6px 10px; color:var(--text-dim);" title="Delete this saved session">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <span>Delete</span>
+          </button>
+          ${dub.exportUrl ? `
+            <a class="btn btn-ghost" href="${dub.exportUrl}" download="${escapeHtml(dub.videoName || 'dub')}.webm" style="font-size:12.5px; padding:6px 12px; text-decoration:none;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <span>Download Export</span>
+            </a>
+          ` : ''}
+          <button class="btn btn-primary btn-resume-dub" data-id="${dub.id}" style="font-size:13px; padding:7px 16px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span>${isTopLobby ? 'Re-enter Studio / Lobby' : 'Resume Session'}</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Wire up resume and delete buttons
+  container.querySelectorAll('.btn-resume-dub').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.getAttribute('data-id');
+      const targetDub = dubs.find(d => d.id === id);
+      if (targetDub) {
+        resumeSavedSession(targetDub);
+      }
+    };
+  });
+
+  container.querySelectorAll('.btn-delete-dub').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.getAttribute('data-id');
+      showConfirm("Delete Saved Dub?", "Are you sure you want to remove this saved session from history?", () => {
+        deleteSavedDub(id);
+        renderSavedDubsScreen();
+        showNotice("Saved session removed.", "info", 2000);
+      });
+    };
+  });
+}
+
+function resumeSavedSession(targetDub) {
+  if (!targetDub) return;
+
+  // Restore room and session mode
+  state.roomId = targetDub.roomId || 'SOLO';
+  state.isSingleplayer = Boolean(targetDub.isSingleplayer);
+  state.isHost = true;
+  state.scoringMode = Boolean(targetDub.scoringMode);
+  state.duration = targetDub.duration || 0;
+  state.videoSyncedName = targetDub.videoName || null;
+
+  // Restore fragments
+  if (Array.isArray(targetDub.fragments) && targetDub.fragments.length > 0) {
+    state.fragments = JSON.parse(JSON.stringify(targetDub.fragments));
+  } else {
+    state.fragments = [];
+  }
+
+  // Restore takes metadata
+  if (targetDub.takes && typeof targetDub.takes === 'object') {
+    state.takes = { ...targetDub.takes };
+  } else {
+    state.takes = {};
+  }
+
+  // Restore players list with anon1..anon4 fallbacks for multiplayer, never anon for singleplayer
+  const primaryName = targetDub.collaborators?.[0]?.name;
+  if (state.isSingleplayer) {
+    state.uid = 'local_player';
+    const soloName = (primaryName && !primaryName.startsWith('anon')) ? primaryName : 'Solo Dubber';
+    state.me = { id: state.uid, name: soloName, color: PLAYER_COLORS[0], ready: true };
+    state.players = [state.me];
+  } else {
+    state.uid = state.uid || 'anon1_host';
+    state.me = { id: state.uid, name: primaryName || 'anon1', color: PLAYER_COLORS[0], ready: true };
+    state.players = (Array.isArray(targetDub.collaborators) && targetDub.collaborators.length)
+      ? targetDub.collaborators.map((c, i) => ({
+          id: c.id || `anon${i+1}`,
+          name: c.name || getAnonymousPlayerName(i),
+          color: c.color || PLAYER_COLORS[i % PLAYER_COLORS.length],
+          ready: true
+        }))
+      : [state.me];
+  }
+
+  // CRITICAL: Always initialize roomData so startStudio and handlers never encounter null
+  state.roomData = {
+    id: state.roomId,
+    hostId: state.uid,
+    players: state.players,
+    status: 'lobby',
+    videoName: targetDub.videoName || null,
+    videoSize: targetDub.videoSizeBytes || null,
+    scoringMode: state.scoringMode,
+    fragments: state.fragments
+  };
+
+  if(el('scoringToggle')) {
+    el('scoringToggle').disabled = false;
+    el('scoringToggle').checked = state.scoringMode;
+  }
+  if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
+
+  // Check if we have the video loaded or if file needs selection
+  const v = el('mainVideo');
+  if (state.file || (v && v.src && v.src !== window.location.href)) {
+    state.roomData.status = 'studio';
+    enterStudio();
+    showNotice(`Resumed session for "${targetDub.title}" with ${state.fragments.length} lines.`, "success", 3000);
+  } else {
+    // Show lobby with dropzone prompting for video to reopen studio
+    if (el('startStudioBtn')) el('startStudioBtn').disabled = true;
+
+    if (state.isSingleplayer) {
+      updateLobbyCodeUI('SOLO');
+      if (el('lobbyHostUI')) el('lobbyHostUI').style.display = 'block';
+      if (el('lobbyGuestUI')) el('lobbyGuestUI').style.display = 'none';
+      renderLobbyPlayers(state.players, state.uid);
+      if (el('hostDropzone')) {
+        el('hostDropzone').innerHTML = `
+          <strong style="color:var(--accent);">Restored: ${escapeHtml(targetDub.title)}</strong><br>
+          <span style="font-size:12px; color:var(--text-dim);">${state.fragments.length} lines & ${targetDub.takesCount || 0} takes restored. Click or drop video file to launch studio.</span>
+        `;
+      }
+      switchScreen('lobbyScreen');
+      showNotice(`Session restored! Select "${targetDub.videoName || 'your video'}" to launch studio.`, "info", 4000);
+    } else {
+      updateLobbyCodeUI(state.roomId);
+      if (el('lobbyHostUI')) el('lobbyHostUI').style.display = 'block';
+      if (el('lobbyGuestUI')) el('lobbyGuestUI').style.display = 'none';
+      renderLobbyPlayers(state.players, state.uid);
+      if (el('hostDropzone')) {
+        el('hostDropzone').innerHTML = `
+          <strong style="color:var(--accent);">Restored Room ${state.roomId}</strong><br>
+          <span style="font-size:12px; color:var(--text-dim);">${state.fragments.length} lines restored. Select video to reopen.</span>
+        `;
+      }
+      switchScreen('lobbyScreen');
+      showNotice(`Lobby ${state.roomId} restored with ${state.fragments.length} lines!`, "info", 4000);
+    }
+  }
+
+  persistCurrentSession();
+}
+
 function isSoloSession() {
   return Boolean(state.isSingleplayer || !state.roomId || state.roomId === 'LOCAL');
 }
 
+function updateLobbyCodeUI(code) {
+  if (el('lobbyRoomCode')) el('lobbyRoomCode').textContent = code;
+  const copyBtn = el('copyInviteBtn');
+  if (copyBtn) {
+    if (code === 'SOLO' || isSoloSession()) {
+      copyBtn.style.display = 'none';
+    } else {
+      copyBtn.style.display = 'inline-flex';
+    }
+  }
+}
+
 function resetToMenu() {
+  persistCurrentSession();
   if (state.unsubRoom) { state.unsubRoom(); state.unsubRoom = null; }
   if (state.unsubTakes) { state.unsubTakes(); state.unsubTakes = null; }
   if (state.roomEventUnsub) { state.roomEventUnsub(); state.roomEventUnsub = null; }
@@ -252,8 +1163,12 @@ function resetToMenu() {
   state.editMode = false;
   state.undoStack = [];
   state.playerActivities = {};
+  autoTranscribedFragKeys.clear();
+  autoTranscribeKeyMissing = false;
 
   if (el('undoBtn')) el('undoBtn').disabled = true;
+  updateMasterFragmentsDuration();
+  updateMonitorSubtitle();
   if (el('setupLoader')) el('setupLoader').style.display = 'none';
   if (el('lobbyHostUI')) el('lobbyHostUI').style.display = 'none';
   if (el('lobbyGuestUI')) el('lobbyGuestUI').style.display = 'none';
@@ -272,6 +1187,24 @@ function resetToMenu() {
     el('laneScoreBadge').className = 'lane-score-badge';
   }
   
+  const copyBtn = el('copyInviteBtn');
+  if (copyBtn) {
+    copyBtn.style.display = 'none';
+    copyBtn.classList.remove('copied');
+  }
+  const copyText = el('copyInviteText');
+  if (copyText) copyText.textContent = 'Copy Invite Link';
+
+  if (el('hostUploadUI')) el('hostUploadUI').style.display = 'none';
+  if (el('guestMatchUI')) el('guestMatchUI').style.display = 'none';
+  if (el('syncProgressFill')) el('syncProgressFill').style.width = '0%';
+  if (el('syncProgressText')) el('syncProgressText').textContent = '0%';
+  if (el('hostUploadProgressFill')) el('hostUploadProgressFill').style.width = '0%';
+  if (el('hostUploadProgressText')) el('hostUploadProgressText').textContent = '0%';
+  if (el('monitorLoadingBarFill')) el('monitorLoadingBarFill').style.width = '0%';
+  if (el('monitorLoadingPercent')) el('monitorLoadingPercent').textContent = '0%';
+  if (el('renderProgressFill')) el('renderProgressFill').style.width = '0%';
+
   switchScreen('setupScreen');
 }
 
@@ -287,6 +1220,23 @@ if (typeof document !== 'undefined') {
     };
   }
 
+  const mpBackBtn = el('mpBackBtn');
+  if (mpBackBtn) {
+    mpBackBtn.onclick = () => {
+      switchScreen('setupScreen');
+    };
+  }
+
+  const playMultiplayerBtn = el('playMultiplayerBtn');
+  if (playMultiplayerBtn) {
+    playMultiplayerBtn.onclick = () => {
+      switchScreen('multiplayerScreen');
+      setTimeout(() => {
+        el('playerNameInput')?.focus();
+      }, 120);
+    };
+  }
+
   const studioBackBtn = el('studioBackBtn');
   if (studioBackBtn) {
     studioBackBtn.onclick = () => {
@@ -297,6 +1247,49 @@ if (typeof document !== 'undefined') {
       showConfirm('Leave Studio?', 'Are you sure you want to return to the main menu? You will disconnect from this session.', resetToMenu);
     };
   }
+
+  const copyInviteBtn = el('copyInviteBtn');
+  if (copyInviteBtn) {
+    copyInviteBtn.onclick = async () => {
+      if (isSoloSession() || !state.roomId || state.roomId === 'LOCAL') {
+        return showNotice("Solo sessions cannot be shared. Host a multiplayer room to invite friends.", "info");
+      }
+      const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(state.roomId)}`;
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(inviteUrl);
+          copied = true;
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = inviteUrl;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          copied = document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+      } catch (err) {
+        console.warn("Clipboard copy fallback:", err);
+      }
+
+      if (copied) {
+        const textSpan = el('copyInviteText');
+        const originalText = textSpan ? textSpan.textContent : 'Copy Invite Link';
+        if (textSpan) textSpan.textContent = 'Link Copied!';
+        copyInviteBtn.classList.add('copied');
+        showNotice(`Invite link for room ${state.roomId} copied to clipboard!`, "success", 3000);
+        setTimeout(() => {
+          if (textSpan) textSpan.textContent = originalText;
+          copyInviteBtn?.classList.remove('copied');
+        }, 2200);
+      } else {
+        window.prompt("Copy this invite link to share with friends:", inviteUrl);
+      }
+    };
+  }
 }
 
 function switchScreen(id){
@@ -305,10 +1298,11 @@ function switchScreen(id){
     if (el(id)) el(id).classList.add('active');
   }
 
-  if (id === 'studioScreen') {
-    stopAsteroids();
-  } else {
+  // Asteroids remain visible in menu, lobby, and record screen if enabled in settings
+  if (settings.get('asteroidsMode') !== 'off') {
     startAsteroids();
+  } else {
+    stopAsteroids();
   }
 }
 
@@ -319,9 +1313,9 @@ function ensureCtx(){
 
 async function authenticate(){
   if(state.uid) return true;
-  el('setupLoader').style.display = 'block';
+  if (el('setupLoader')) el('setupLoader').style.display = 'block';
   const fb = await loadFirebase();
-  if(!fb){ el('setupLoader').style.display = 'none'; return false; }
+  if(!fb){ if (el('setupLoader')) el('setupLoader').style.display = 'none'; return false; }
   try {
     let cred;
     if (typeof __initial_auth_token !== 'undefined') {
@@ -334,25 +1328,33 @@ async function authenticate(){
   } catch(e) {
     console.error("Auth error:", e);
     showNotice("Authentication failed.");
-    el('setupLoader').style.display = 'none';
+    if (el('setupLoader')) el('setupLoader').style.display = 'none';
     return false;
   }
 }
 
 function renderLobbyPlayers(players, hostId){
-  el('lobbyPlayerList').innerHTML = players.map(player => {
-    const progress = Number.isFinite(player.syncProgress) ? player.syncProgress : 0;
-    const isSyncing = !player.ready && progress > 0;
-    const status = player.ready
+  const container = el('lobbyPlayerList');
+  if(!container) return;
+  const isSolo = isSoloSession();
+  container.innerHTML = (players || []).map((player, idx) => {
+    const progress = Number.isFinite(player?.syncProgress) ? player.syncProgress : 0;
+    const isSyncing = !player?.ready && progress > 0;
+    const status = player?.ready
       ? 'Ready'
       : isSyncing
         ? `<span>Syncing ${progress}%</span><span class="player-sync-bar"><span style="width:${progress}%"></span></span>`
         : 'Waiting';
+    let pName = player?.name;
+    if (!pName || (isSolo && pName.startsWith('anon'))) {
+      pName = isSolo ? 'Solo Dubber' : getAnonymousPlayerName(idx);
+    }
+    const hostTag = (!isSolo && player?.id === hostId) ? '(Host)' : '';
     return `
       <div class="player-row">
-        <div class="player-swatch" style="background:${player.color}"></div>
-        <div class="player-name">${player.name} ${player.id === hostId ? '(Host)' : ''}</div>
-        <div class="player-status ${player.ready ? 'ready' : ''}">${status}</div>
+        <div class="player-swatch" style="background:${player?.color || '#B285F5'}"></div>
+        <div class="player-name">${pName} ${hostTag}</div>
+        <div class="player-status ${player?.ready ? 'ready' : ''}">${status}</div>
       </div>
     `;
   }).join('');
@@ -360,11 +1362,14 @@ function renderLobbyPlayers(players, hostId){
 
 if (el('singleplayerBtn')) {
   el('singleplayerBtn').onclick = () => {
+    const inputVal = el('playerNameInput')?.value.trim();
+    const name = inputVal || 'Solo Dubber';
     state.isSingleplayer = true;
     state.uid = 'local_player';
     state.isHost = true;
     state.roomId = 'LOCAL';
-    state.me = { id: state.uid, name: 'You', color: PLAYER_COLORS[0], ready: true };
+    state.me = { id: state.uid, name, color: PLAYER_COLORS[0], ready: true };
+    state.players = [state.me];
     state.roomData = {
       id: 'LOCAL',
       hostId: state.uid,
@@ -376,14 +1381,8 @@ if (el('singleplayerBtn')) {
       fragments: []
     };
     
-    el('lobbyRoomCode').textContent = 'SOLO';
-    el('lobbyPlayerList').innerHTML = `
-      <div class="player-row">
-        <div class="player-swatch" style="background:${state.me.color}"></div>
-        <div class="player-name">You (Solo)</div>
-        <div class="player-status ready">Ready</div>
-      </div>
-    `;
+    updateLobbyCodeUI('SOLO');
+    renderLobbyPlayers(state.players, state.uid);
     if(el('scoringToggle')) {
       el('scoringToggle').disabled = false;
       el('scoringToggle').checked = state.scoringMode;
@@ -391,15 +1390,16 @@ if (el('singleplayerBtn')) {
     if(el('scoringHostNote')) el('scoringHostNote').style.display = 'none';
     if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
 
-    el('lobbyHostUI').style.display = 'block';
-    el('startStudioBtn').disabled = true; // wait for file
+    if (el('lobbyHostUI')) el('lobbyHostUI').style.display = 'block';
+    if (el('startStudioBtn')) el('startStudioBtn').disabled = true; // wait for file
     switchScreen('lobbyScreen');
   };
 }
 
 if (el('createRoomBtn')) {
   el('createRoomBtn').onclick = async () => {
-    const name = el('playerNameInput')?.value.trim() || 'Host';
+    const inputVal = el('playerNameInput')?.value.trim();
+    const name = inputVal || 'anon1';
     try {
       const ok = await authenticate();
       if(!ok) return showNotice("Could not connect to authentication service.", "error");
@@ -412,6 +1412,7 @@ if (el('createRoomBtn')) {
       state.isSingleplayer = false;
       state.scoringMode = Boolean(el('scoringToggle')?.checked);
       state.me = { id: state.uid, name, color: PLAYER_COLORS[0], ready: false };
+      state.players = [state.me];
       
       const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
       await fb.setDoc(roomRef, {
@@ -429,6 +1430,7 @@ if (el('createRoomBtn')) {
       if(el('scoringHostNote')) el('scoringHostNote').style.display = 'none';
       if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
 
+      updateLobbyCodeUI(roomId);
       listenToRoom();
       switchScreen('lobbyScreen');
       showNotice(`Room created! Code: ${roomId}`, "success", 3000);
@@ -443,7 +1445,6 @@ if (el('createRoomBtn')) {
 
 if (el('joinRoomBtn')) {
   el('joinRoomBtn').onclick = async () => {
-  const name = el('playerNameInput').value.trim() || 'Guest';
   const roomId = el('roomCodeInput').value.trim().toUpperCase();
   if(!roomId) return showNotice("Please enter a room code.", "warning");
   if(roomId.length !== 5) return showNotice("Room code must be 5 letters (e.g. ABCDE).", "warning");
@@ -461,7 +1462,11 @@ if (el('joinRoomBtn')) {
     if(data.players && data.players.length >= 4) return showNotice("This room is already full (maximum 4 players).", "warning");
     if(data.status !== 'lobby') return showNotice("This room has already started its studio session.", "warning");
 
-    const color = PLAYER_COLORS[data.players.length % PLAYER_COLORS.length];
+    const existingCount = Array.isArray(data.players) ? data.players.length : 1;
+    const inputVal = el('playerNameInput')?.value.trim();
+    const name = inputVal || getAnonymousPlayerName(existingCount);
+
+    const color = PLAYER_COLORS[existingCount % PLAYER_COLORS.length];
     state.me = { id: state.uid, name, color, ready: false };
     state.roomId = roomId;
     state.isHost = false;
@@ -479,7 +1484,7 @@ if (el('joinRoomBtn')) {
     }
     if(el('scoreModeBadge')) el('scoreModeBadge').classList.toggle('active', state.scoringMode);
 
-    el('lobbyRoomCode').textContent = data.id;
+    updateLobbyCodeUI(data.id || roomId);
     renderLobbyPlayers(state.roomData.players, data.hostId);
     el('lobbyGuestUI').style.display = 'block';
     listenToRoom();
@@ -509,7 +1514,7 @@ function listenToRoom(){
       state.roomData = data;
       
       // Update Lobby UI
-      el('lobbyRoomCode').textContent = data.id;
+      updateLobbyCodeUI(data.id || '');
       renderLobbyPlayers(data.players || [], data.hostId);
 
       // Sync scoring mode from room doc
@@ -537,23 +1542,25 @@ function listenToRoom(){
 
       if(data.status === 'lobby'){
         if(state.isHost){
-          el('lobbyHostUI').style.display = 'block';
+          if (el('lobbyHostUI')) el('lobbyHostUI').style.display = 'block';
           const allReady = (data.players || []).length > 0 && data.players.every(p => p.ready);
-          el('startStudioBtn').disabled = !allReady || !data.videoName;
+          if (el('startStudioBtn')) el('startStudioBtn').disabled = !allReady || !data.videoName;
         } else {
-          el('lobbyGuestUI').style.display = 'block';
-          if(data.videoName && !state.me.ready){
-            el('guestWaitText').style.display = 'none';
-            el('guestMatchUI').style.display = 'block';
-            el('reqFileName').textContent = data.videoName;
+          if (el('lobbyGuestUI')) el('lobbyGuestUI').style.display = 'block';
+          if(data.videoName && !state.me?.ready){
+            if (el('guestWaitText')) el('guestWaitText').style.display = 'none';
+            if (el('guestMatchUI')) el('guestMatchUI').style.display = 'block';
+            if (el('reqFileName')) el('reqFileName').textContent = data.videoName;
             syncHostVideo(data);
-          } else if (state.me.ready) {
-            el('guestMatchUI').style.display = 'none';
-            el('guestWaitText').style.display = 'block';
-            el('guestWaitText').textContent = "File synced! Waiting for host to start...";
+          } else if (state.me?.ready) {
+            if (el('guestMatchUI')) el('guestMatchUI').style.display = 'none';
+            if (el('guestWaitText')) {
+              el('guestWaitText').style.display = 'block';
+              el('guestWaitText').textContent = "File synced! Waiting for host to start...";
+            }
           }
         }
-      } else if (data.status === 'studio' && !el('studioScreen').classList.contains('active')) {
+      } else if (data.status === 'studio' && !el('studioScreen')?.classList.contains('active')) {
         enterStudio();
       }
       
@@ -572,23 +1579,40 @@ async function syncHostVideo(roomData){
   if(state.videoSyncing || state.videoSyncedName === roomData.videoName) return;
   state.videoSyncing = true;
   state.syncProgress = 0;
-  el('reqFileName').textContent = roomData.videoName;
-  el('syncProgressFill').style.width = '0%';
-  el('syncProgressText').textContent = '0%';
+  if (el('reqFileName')) el('reqFileName').textContent = roomData.videoName;
+  if (el('guestSyncStatusMsg')) el('guestSyncStatusMsg').textContent = 'Connecting to host video stream...';
+
+  const guestStepper = createProgressStepper({
+    fillEl: el('syncProgressFill'),
+    textEl: el('syncProgressText'),
+    textSuffix: '%',
+    initial: 0,
+    minStepMs: 6,
+    maxStepMs: 14,
+    onStep: (pct) => {
+      el('guestMatchUI')?.querySelector('.sync-progress')?.setAttribute('aria-valuenow', pct);
+      if (pct >= 95) {
+        if (el('guestSyncStatusMsg')) el('guestSyncStatusMsg').textContent = 'Finalizing audio buffer cache...';
+      } else if (pct > 0) {
+        if (el('guestSyncStatusMsg')) el('guestSyncStatusMsg').textContent = `Downloading video stream... (${pct}%)`;
+      }
+      if (pct === 0 || pct === 100 || pct >= state.syncProgress + 3) {
+        state.syncProgress = pct;
+        multiplayer.api.announcePlayer(state.roomId, { ...state.me, ready: pct >= 100, syncProgress: pct }).catch(() => {});
+      }
+    }
+  });
+
   try {
     state.file = await multiplayer.api.downloadVideo(state.roomId, progress => {
-      el('syncProgressFill').style.width = `${progress}%`;
-      el('syncProgressText').textContent = `${progress}%`;
-      el('guestMatchUI').querySelector('.sync-progress').setAttribute('aria-valuenow', progress);
-      if(progress === 0 || progress === 100 || progress >= state.syncProgress + 5){
-        state.syncProgress = progress;
-        multiplayer.api.announcePlayer(state.roomId, { ...state.me, ready:false, syncProgress:progress }).catch(() => {});
-      }
+      guestStepper.setTarget(progress);
     });
-    el('syncProgressFill').style.width = '100%';
-    el('syncProgressText').textContent = '100% - ready';
+    await guestStepper.finish(100);
+
+    if (el('syncProgressText')) el('syncProgressText').textContent = '100% - Ready';
+    if (el('guestSyncStatusMsg')) el('guestSyncStatusMsg').textContent = 'Video cached! Ready to enter studio.';
     state.videoSyncedName = roomData.videoName;
-    state.me.ready = true;
+    if (state.me) state.me.ready = true;
     const fb = await loadFirebase();
     if(fb){
       const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
@@ -596,9 +1620,13 @@ async function syncHostVideo(roomData){
       state.roomData = { ...state.roomData, players: updatedPlayers };
       await fb.updateDoc(roomRef, { players: updatedPlayers }).catch(() => {});
     }
-    await multiplayer.api.announcePlayer(state.roomId, state.me = { ...state.me, ready: true, syncProgress:100 });
+    if (state.me) {
+      await multiplayer.api.announcePlayer(state.roomId, state.me = { ...state.me, ready: true, syncProgress:100 });
+    }
   } catch(error) {
+    guestStepper.stop();
     console.error('Host video sync error:', error);
+    if (el('guestSyncStatusMsg')) el('guestSyncStatusMsg').textContent = 'Network sync interrupted. Retrying automatically...';
     showNotice('Could not download the host video. Retrying shortly.', 'warning');
   } finally {
     state.videoSyncing = false;
@@ -619,9 +1647,26 @@ async function handleHostFile(file){
   state.file = file;
   el('hostDropzone').textContent = `Selected: ${file.name}`;
 
+  // Always ensure state.roomData is initialized
+  if(!state.roomData) {
+    state.roomData = {
+      id: state.roomId || (isSoloSession() ? 'LOCAL' : 'SOLO'),
+      hostId: state.uid || 'local_player',
+      players: state.players || (state.me ? [state.me] : []),
+      status: 'lobby',
+      videoName: file.name,
+      videoSize: file.size,
+      scoringMode: state.scoringMode,
+      fragments: state.fragments || []
+    };
+  } else {
+    state.roomData.videoName = file.name;
+    state.roomData.videoSize = file.size;
+  }
+
+  if (el('startStudioBtn')) el('startStudioBtn').disabled = false;
+
   if(isSoloSession()){
-    if(state.roomData) state.roomData.videoName = file.name;
-    el('startStudioBtn').disabled = false;
     showNotice(`Loaded "${file.name}" for solo session.`, "success", 2500);
     return;
   }
@@ -629,15 +1674,40 @@ async function handleHostFile(file){
   const fb = await loadFirebase();
   if(!fb) return showNotice("Connection service unavailable. Please retry.", "error");
 
+  let uploadStepper = null;
   try {
-    el('hostDropzone').textContent = `Uploading ${file.name}...`;
-    await multiplayer.api.uploadVideo(state.roomId, file);
     el('hostDropzone').textContent = `Selected: ${file.name}`;
+    if (el('hostUploadUI')) {
+      el('hostUploadUI').style.display = 'block';
+      if (el('hostUploadFileName')) el('hostUploadFileName').textContent = file.name;
+      if (el('hostUploadStatusMsg')) el('hostUploadStatusMsg').textContent = 'Uploading video clip to room mesh...';
+      uploadStepper = createProgressStepper({
+        fillEl: el('hostUploadProgressFill'),
+        textEl: el('hostUploadProgressText'),
+        textSuffix: '%',
+        initial: 0,
+        minStepMs: 6,
+        maxStepMs: 14
+      });
+    }
+    await multiplayer.api.uploadVideo(state.roomId, file, (progress) => {
+      if (uploadStepper) uploadStepper.setTarget(progress);
+    });
+    if (uploadStepper) {
+      await uploadStepper.finish(100);
+      if (el('hostUploadProgressText')) el('hostUploadProgressText').textContent = '100% - Ready';
+      if (el('hostUploadStatusMsg')) el('hostUploadStatusMsg').textContent = 'Video uploaded & distributed to guests!';
+    } else {
+      if (el('hostUploadProgressFill')) el('hostUploadProgressFill').style.width = '100%';
+      if (el('hostUploadProgressText')) el('hostUploadProgressText').textContent = '100% - Ready';
+    }
     showNotice(`Video uploaded! Waiting for guests to sync.`, "success", 3000);
   } catch(error) {
+    if (uploadStepper) uploadStepper.stop();
     console.error('Host video upload error:', error);
     state.file = null;
     el('hostDropzone').textContent = 'Click or drop a video file here';
+    if (el('hostUploadUI')) el('hostUploadUI').style.display = 'none';
     return showNotice('Failed to upload video to the room: ' + (error?.message || 'network error'), 'error');
   }
 
@@ -650,11 +1720,24 @@ async function handleHostFile(file){
     }
     if(state.me) state.me.ready = true;
 
-    await fb.updateDoc(roomRef, {
-      videoName: file.name,
-      videoSize: file.size,
-      players: updatedPlayers
-    });
+    try {
+      await fb.updateDoc(roomRef, {
+        videoName: file.name,
+        videoSize: file.size,
+        players: updatedPlayers
+      });
+    } catch(upErr) {
+      await fb.setDoc(roomRef, {
+        id: state.roomId,
+        hostId: state.uid,
+        videoName: file.name,
+        videoSize: file.size,
+        scoringMode: state.scoringMode,
+        players: updatedPlayers,
+        status: 'lobby',
+        fragments: state.fragments || []
+      }, { merge: true });
+    }
   } catch(dbErr) {
     console.error('Failed to update room metadata:', dbErr);
     showNotice('Failed to update room status. Please try re-selecting the file.', 'error');
@@ -704,7 +1787,20 @@ if (el('startStudioBtn')) {
       if(!state.file){
         return showNotice("Please select a video file before starting studio.", "warning");
       }
-      state.roomData.status = 'studio';
+      if (!state.roomData) {
+        state.roomData = {
+          id: state.roomId || 'LOCAL',
+          hostId: state.uid || 'local_player',
+          players: state.players || (state.me ? [state.me] : []),
+          status: 'studio',
+          videoName: state.file.name,
+          videoSize: state.file.size,
+          scoringMode: state.scoringMode,
+          fragments: state.fragments || []
+        };
+      } else {
+        state.roomData.status = 'studio';
+      }
       enterStudio();
       return;
     }
@@ -714,8 +1810,36 @@ if (el('startStudioBtn')) {
       if(!state.file && !state.roomData?.videoName){
         return showNotice("Please upload a video clip before starting the studio.", "warning");
       }
+      if (!state.roomData) {
+        state.roomData = {
+          id: state.roomId,
+          hostId: state.uid,
+          players: state.players || (state.me ? [state.me] : []),
+          status: 'studio',
+          videoName: state.file?.name,
+          videoSize: state.file?.size,
+          scoringMode: state.scoringMode,
+          fragments: state.fragments || []
+        };
+      } else {
+        state.roomData.status = 'studio';
+      }
       const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-      await fb.updateDoc(roomRef, { status: 'studio' });
+      try {
+        await fb.updateDoc(roomRef, { status: 'studio' });
+      } catch(upErr) {
+        await fb.setDoc(roomRef, {
+          id: state.roomId,
+          hostId: state.uid,
+          players: state.players || (state.me ? [state.me] : []),
+          status: 'studio',
+          videoName: state.file?.name || state.roomData?.videoName || '',
+          videoSize: state.file?.size || state.roomData?.videoSize || 0,
+          scoringMode: state.scoringMode,
+          fragments: state.fragments || []
+        }, { merge: true });
+      }
+      enterStudio();
     } catch(err) {
       console.error("Start studio error:", err);
       showNotice("Could not start studio session: " + (err?.message || "network error"), "error");
@@ -776,12 +1900,25 @@ async function enterStudio(){
 
   // If guest enters studio and video file is not yet locally downloaded, download it now for buffer extraction
   if(!state.file && state.roomId && !state.isSingleplayer){
-    el('monitorLoading').style.display = 'flex';
-    el('monitorLoadingText').textContent = 'Syncing video...';
+    if (el('monitorLoading')) el('monitorLoading').style.display = 'flex';
+    if (el('monitorLoadingText')) el('monitorLoadingText').textContent = 'Syncing video from host...';
+    if (el('monitorLoadingSub')) el('monitorLoadingSub').textContent = 'Downloading media for timeline playback';
+    const monitorDownloadStepper = createProgressStepper({
+      fillEl: el('monitorLoadingBarFill'),
+      textEl: el('monitorLoadingPercent'),
+      textSuffix: '%',
+      initial: 0,
+      minStepMs: 6,
+      maxStepMs: 14,
+      onStep: (pct) => {
+        if (el('monitorLoadingText')) el('monitorLoadingText').textContent = `Syncing video... ${pct}%`;
+      }
+    });
     try {
       state.file = await multiplayer.api.downloadVideo(state.roomId, (progress) => {
-        el('monitorLoadingText').textContent = `Syncing video... ${progress}%`;
+        monitorDownloadStepper.setTarget(progress);
       });
+      await monitorDownloadStepper.finish(100);
       state.videoSyncedName = state.roomData?.videoName || 'clip.mp4';
       if(state.me) state.me.ready = true;
       // Re-point video to local blob for best seek performance
@@ -792,9 +1929,8 @@ async function enterStudio(){
         video.load();
       }
     } catch(err) {
+      monitorDownloadStepper.stop();
       console.warn('Background download completed via stream fallback:', err);
-    } finally {
-      el('monitorLoading').style.display = 'none';
     }
   }
 
@@ -810,22 +1946,55 @@ async function enterStudio(){
 
   // Extract master buffer & audio envelope for waveforms & vocals
   if(state.file){
+    let audioExtractStepper = null;
     try {
+      if (el('monitorLoading')) el('monitorLoading').style.display = 'flex';
+      if (el('monitorLoadingText')) el('monitorLoadingText').textContent = 'Analyzing audio timeline...';
+      if (el('monitorLoadingSub')) el('monitorLoadingSub').textContent = 'Extracting speech dynamics, waveform & vocal bed';
+
+      audioExtractStepper = createProgressStepper({
+        fillEl: el('monitorLoadingBarFill'),
+        textEl: el('monitorLoadingPercent'),
+        textSuffix: '%',
+        initial: 0,
+        minStepMs: 6,
+        maxStepMs: 12
+      });
+
+      audioExtractStepper.setTarget(30);
       const ctx = ensureCtx();
       if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
       const arr = await state.file.arrayBuffer();
+
+      audioExtractStepper.setTarget(65);
       state.masterBuffer = await ctx.decodeAudioData(arr.slice(0));
+
+      audioExtractStepper.setTarget(85);
       state.envelope = buildEnvelope(state.masterBuffer, 50);
       state.backgroundBuffer = buildVocalReducedBuffer(state.masterBuffer);
       if(!state.backgroundBuffer){
         showNotice("This clip's audio is mono, so the original voice can't be separated from the background. The full original audio will play under any un-dubbed lines instead.");
       }
+
+      await audioExtractStepper.finish(100);
+      await new Promise(r => setTimeout(r, 160));
     } catch(e) {
+      if (audioExtractStepper) audioExtractStepper.stop();
       console.warn("Waveform extraction notice:", e);
+    } finally {
+      if (el('monitorLoading')) el('monitorLoading').style.display = 'none';
     }
+  } else {
+    if (el('monitorLoading')) el('monitorLoading').style.display = 'none';
   }
 
-  if(state.isHost && (!state.roomData?.fragments || state.roomData.fragments.length === 0)){
+  const existingFrags = (state.roomData?.fragments && state.roomData.fragments.length > 0)
+    ? state.roomData.fragments
+    : (Array.isArray(state.fragments) && state.fragments.length > 0)
+      ? state.fragments
+      : null;
+
+  if (state.isHost && (!existingFrags || existingFrags.length === 0)) {
     // Host auto-segments and distributes lines across players in room
     const initialFrags = autoSegment();
     const roomPlayers = state.roomData?.players || (state.me ? [state.me] : []);
@@ -847,19 +2016,36 @@ async function enterStudio(){
       const fb = await loadFirebase();
       if(fb && state.roomId){
         const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-        await fb.updateDoc(roomRef, { fragments: initialFrags });
+        try {
+          await fb.updateDoc(roomRef, { fragments: initialFrags });
+        } catch(e) {
+          console.warn("Fragment sync:", e);
+        }
         sendPlaybackEvent({ action: 'sync-fragments', fragments: initialFrags });
       }
     }
   } else {
-    // If roomData already has fragments or guest joined
-    if(state.roomData?.fragments && state.roomData.fragments.length > 0){
-      state.fragments = [...state.roomData.fragments];
+    // Preserve existing fragments from restored session or room state
+    if (existingFrags && existingFrags.length > 0) {
+      state.fragments = [...existingFrags];
+      if (state.roomData) state.roomData.fragments = [...existingFrags];
       renderMasterCanvas();
       renderFragmentList();
       const myLineIdx = state.fragments.findIndex(f => Array.isArray(f.assigned) && f.assigned.includes(state.uid));
       state.currentIndex = myLineIdx >= 0 ? myLineIdx : 0;
       if(state.fragments.length > 0) selectFragment(state.currentIndex, true);
+
+      if (!state.isSingleplayer && state.isHost) {
+        const fb = await loadFirebase();
+        if(fb && state.roomId){
+          const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+          try {
+            await fb.updateDoc(roomRef, { fragments: state.fragments });
+          } catch(e) {
+            console.warn("Restored fragment sync:", e);
+          }
+        }
+      }
     }
   }
 
@@ -872,8 +2058,18 @@ async function enterStudio(){
     if(state.fragments[state.currentIndex]) {
       drawWave(state.fragments[state.currentIndex]);
       updateLaneScoreDisplay(state.fragments[state.currentIndex]);
+      updateActiveLineTranscriptUI(state.fragments[state.currentIndex]);
+    } else {
+      updateActiveLineTranscriptUI();
     }
+    updateMonitorSubtitle();
     checkRecordAbility();
+    persistCurrentSession();
+
+    // Automatically run Voice-to-Text for any un-transcribed fragments once audio is decoded
+    if ((state.isHost || state.isSingleplayer) && state.masterBuffer && state.fragments.length > 0) {
+      autoTranscribeMissingFragments({ silent: true });
+    }
   });
 }
 
@@ -999,7 +2195,13 @@ function autoSegment(){
     for(let k=0; k<parts; k++) refined.push([s + k*step, k === parts-1 ? e : s + (k+1)*step]);
   }
 
-  return refined.map(([s,e], i) => ({ id: 'f_'+i+'_'+Math.random().toString(36).slice(2,6), start: s, end: e, assigned: state.isSingleplayer ? [state.uid] : [] }));
+  return refined.map(([s,e], i) => ({
+    id: 'f_'+i+'_'+Math.random().toString(36).slice(2,6),
+    start: s,
+    end: e,
+    assigned: state.isSingleplayer ? [state.uid] : [],
+    transcript: ''
+  }));
 }
 
 function syncFragmentsFromDB(dbFrags){
@@ -1010,11 +2212,447 @@ function syncFragmentsFromDB(dbFrags){
   }
   renderMasterCanvas();
   renderFragmentList();
+  updateMasterFragmentsDuration();
   const f = state.fragments[state.currentIndex];
   if(f){
     renderAssignmentUI(f);
     checkRecordAbility();
     drawWave(f);
+    updateActiveLineTranscriptUI(f);
+  }
+}
+
+async function broadcastFragments(fragments = state.fragments) {
+  if (state.roomData) state.roomData.fragments = fragments;
+  if (!isSoloSession() && state.roomId) {
+    sendPlaybackEvent({ action: 'sync-fragments', fragments });
+    const fb = await loadFirebase();
+    if (fb) {
+      const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+      await fb.updateDoc(roomRef, { fragments }).catch(() => {});
+    }
+  }
+}
+
+function updateMonitorSubtitle() {
+  const overlay = el('monitorSubtitleOverlay');
+  const textEl = el('monitorSubtitleText');
+  if (!overlay || !textEl) return;
+
+  if (!settings.get('showSubtitles')) {
+    overlay.style.display = 'none';
+    return;
+  }
+
+  const isActive = Boolean(state.isPlaying || state.paused);
+  const frag = state.pb?.frag || state.fragments[state.currentIndex];
+  const text = (frag && typeof frag.transcript === 'string') ? frag.transcript.trim() : '';
+
+  if (isActive && text) {
+    textEl.textContent = text;
+    overlay.style.display = 'block';
+  } else {
+    overlay.style.display = 'none';
+  }
+}
+
+function updateActiveLineTranscriptUI(f = state.fragments[state.currentIndex]) {
+  const container = el('activeLineTranscriptText');
+  const lineBadge = el('masterTranscriptLineBadge');
+  if (lineBadge) {
+    lineBadge.textContent = `Line ${state.currentIndex + 1}:`;
+  }
+  if (!container) return;
+  if (f && typeof f.transcript === 'string' && f.transcript.trim()) {
+    container.textContent = f.transcript.trim();
+    container.style.fontStyle = 'normal';
+    container.style.color = '#F5EDFF';
+  } else {
+    container.textContent = 'Click Voice-to-Text or click to type script...';
+    container.style.fontStyle = 'italic';
+    container.style.color = 'var(--text-faint)';
+  }
+  updateMonitorSubtitle();
+}
+
+/**
+ * Converts an AudioBuffer channel segment into a lightweight 16kHz mono WAV base64 string
+ * for optimal speech-to-text recognition payload.
+ */
+function audioBufferToWavBase64(audioBuffer, targetSampleRate = 16000) {
+  if (!audioBuffer) return null;
+  const numChannels = audioBuffer.numberOfChannels;
+  const originalSampleRate = audioBuffer.sampleRate;
+  const length = audioBuffer.length;
+  if (length === 0) return null;
+
+  // Mix down to mono
+  const mono = new Float32Array(length);
+  for (let c = 0; c < numChannels; c++) {
+    const channelData = audioBuffer.getChannelData(c);
+    for (let i = 0; i < length; i++) {
+      mono[i] += channelData[i] / numChannels;
+    }
+  }
+
+  // Downsample to targetSampleRate (16kHz)
+  const ratio = originalSampleRate / targetSampleRate;
+  const newLength = Math.max(1, Math.round(length / ratio));
+  const resampled = new Float32Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    const origIndex = i * ratio;
+    const i0 = Math.floor(origIndex);
+    const i1 = Math.min(length - 1, i0 + 1);
+    const frac = origIndex - i0;
+    resampled[i] = mono[i0] * (1 - frac) + mono[i1] * frac;
+  }
+
+  // Quantize Float32 to 16-bit PCM
+  const pcm16 = new Int16Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    const s = Math.max(-1, Math.min(1, resampled[i]));
+    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+
+  const byteRate = targetSampleRate * 2;
+  const blockAlign = 2;
+  const wavBuffer = new ArrayBuffer(44 + pcm16.byteLength);
+  const view = new DataView(wavBuffer);
+
+  const writeStr = (offset, str) => {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  };
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + pcm16.byteLength, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, targetSampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, pcm16.byteLength, true);
+
+  new Uint8Array(wavBuffer, 44).set(new Uint8Array(pcm16.buffer));
+
+  let binary = '';
+  const bytes = new Uint8Array(wavBuffer);
+  const totalBytes = bytes.byteLength;
+  const chunk = 8192;
+  for (let i = 0; i < totalBytes; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(totalBytes, i + chunk)));
+  }
+  return btoa(binary);
+}
+
+let isTranscribing = false;
+const autoTranscribedFragKeys = new Set();
+let autoTranscribeKeyMissing = false;
+let autoTranscribeCooldownUntil = 0;
+
+function getFragTranscribeKey(f) {
+  if (!f) return '';
+  return `${f.id}:${Number(f.start || 0).toFixed(2)}:${Number(f.end || 0).toFixed(2)}`;
+}
+
+function isAudioBufferSilent(audioBuffer, peakThreshold = 0.0004) {
+  if (!audioBuffer || audioBuffer.length === 0) return true;
+  for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+    const ch = audioBuffer.getChannelData(c);
+    for (let i = 0; i < ch.length; i++) {
+      if (Math.abs(ch[i]) >= peakThreshold) return false;
+    }
+  }
+  return true;
+}
+
+async function autoTranscribeMissingFragments({ silent = true } = {}) {
+  if (autoTranscribeKeyMissing || isTranscribing || Date.now() < autoTranscribeCooldownUntil) return;
+  if (!state.masterBuffer || !Array.isArray(state.fragments) || state.fragments.length === 0) return;
+
+  const hasMissing = state.fragments.some(f => {
+    const hasText = typeof f.transcript === 'string' && f.transcript.trim().length > 0;
+    return !hasText && !autoTranscribedFragKeys.has(getFragTranscribeKey(f));
+  });
+  if (!hasMissing) return;
+
+  await transcribeAllFragments({ onlyMissing: true, silent });
+}
+
+async function transcribeActiveLine() {
+  if (isTranscribing) return;
+  const f = state.fragments[state.currentIndex];
+  if (!f) return showNotice("No line selected.", "warning");
+  if (!state.masterBuffer) return showNotice("Audio waveform not yet loaded. Please wait.", "warning");
+
+  const seg = sliceMasterBuffer(f.start, f.end);
+  if (!seg) return showNotice("Could not extract line audio.", "error");
+
+  const base64Wav = audioBufferToWavBase64(seg, 16000);
+  if (!base64Wav) return showNotice("Audio slice is empty.", "warning");
+
+  const v2tBtn = el('voiceToTextBtn');
+  const btnLabel = el('voiceToTextBtnText');
+  const statusPill = el('transcribeStatusPill');
+  const statusText = el('transcribeStatusText');
+  const transcriptTextEl = el('activeLineTranscriptText');
+
+  isTranscribing = true;
+  if (v2tBtn) {
+    v2tBtn.classList.add('is-transcribing');
+    v2tBtn.disabled = true;
+  }
+  if (btnLabel) btnLabel.textContent = 'Transcribing...';
+  if (statusPill) statusPill.style.display = 'inline-flex';
+  if (statusText) statusText.textContent = '0%';
+  if (transcriptTextEl) {
+    transcriptTextEl.textContent = 'Transcribing spoken speech...';
+    transcriptTextEl.style.fontStyle = 'italic';
+  }
+
+  const stepper = createProgressStepper({
+    onStep: (pct) => {
+      if (statusText) statusText.textContent = `${pct}%`;
+    },
+    minStepMs: 8,
+    maxStepMs: 16
+  });
+
+  try {
+    stepper.setTarget(45);
+    const res = await fetch('/api/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio: base64Wav, mimeType: 'audio/wav' })
+    });
+    const data = await res.json();
+    stepper.setTarget(85);
+
+    if (data && data.keyMissing) {
+      autoTranscribeKeyMissing = true;
+      stepper.stop();
+      updateActiveLineTranscriptUI(f);
+      showNotice("Gemini API key is not configured in environment. You can click to type the line script directly.", "info", 4500);
+      if (transcriptTextEl) transcriptTextEl.focus();
+      return;
+    }
+
+    if (data && data.rateLimited) {
+      const waitSec = data.retryAfterSec || 30;
+      autoTranscribeCooldownUntil = Date.now() + waitSec * 1000;
+      stepper.stop();
+      updateActiveLineTranscriptUI(f);
+      showNotice(data.warning || `Voice-to-Text rate limit reached. Try again in ${waitSec}s.`, "warning", 4500);
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP error ${res.status}`);
+    }
+
+    await stepper.finish(100);
+    const transcript = (data?.transcript || '').trim();
+    f.transcript = transcript;
+    autoTranscribedFragKeys.add(getFragTranscribeKey(f));
+    updateActiveLineTranscriptUI(f);
+    broadcastFragments();
+    persistCurrentSession();
+    showNotice(
+      transcript ? `Line ${state.currentIndex + 1} transcribed!` : `No speech detected in Line ${state.currentIndex + 1}.`,
+      transcript ? "success" : "info",
+      3000
+    );
+  } catch (err) {
+    stepper.stop();
+    console.error("Transcribe active line error:", err);
+    updateActiveLineTranscriptUI(f);
+    showNotice(`Voice-to-Text: ${err?.message || 'Transcription failed'}. You can type the script directly.`, "warning", 4500);
+  } finally {
+    isTranscribing = false;
+    if (v2tBtn) {
+      v2tBtn.classList.remove('is-transcribing');
+      v2tBtn.disabled = false;
+    }
+    if (btnLabel) btnLabel.textContent = 'Voice-to-Text';
+    setTimeout(() => {
+      if (statusPill) statusPill.style.display = 'none';
+    }, 1500);
+  }
+}
+
+async function transcribeAllFragments({ onlyMissing = false, silent = false } = {}) {
+  if (isTranscribing) return;
+  if (!state.fragments || state.fragments.length === 0) {
+    if (!silent) showNotice("No lines available in studio to transcribe.", "warning");
+    return;
+  }
+  if (!state.masterBuffer) {
+    if (!silent) showNotice("Audio timeline is still analyzing. Please wait a moment.", "warning");
+    return;
+  }
+
+  const targetFrags = onlyMissing
+    ? state.fragments.filter(f => {
+        const hasText = typeof f.transcript === 'string' && f.transcript.trim().length > 0;
+        return !hasText && !autoTranscribedFragKeys.has(getFragTranscribeKey(f));
+      })
+    : [...state.fragments];
+
+  if (targetFrags.length === 0) return;
+
+  const v2tBtn = el('voiceToTextBtn');
+  const btnLabel = el('voiceToTextBtnText');
+  const statusPill = el('transcribeStatusPill');
+  const statusText = el('transcribeStatusText');
+
+  isTranscribing = true;
+  if (v2tBtn) {
+    v2tBtn.classList.add('is-transcribing');
+    v2tBtn.disabled = true;
+  }
+  if (btnLabel) btnLabel.textContent = onlyMissing ? 'Auto-Transcribing...' : 'Transcribing...';
+  if (statusPill) statusPill.style.display = 'inline-flex';
+  if (statusText) statusText.textContent = onlyMissing ? 'Auto 0%' : '0%';
+
+  const transcribeStepper = createProgressStepper({
+    onStep: (pct) => {
+      if (statusText) statusText.textContent = onlyMissing ? `Auto ${pct}%` : `Transcribing ${pct}%`;
+    },
+    minStepMs: 8,
+    maxStepMs: 16
+  });
+
+  try {
+    transcribeStepper.setTarget(10);
+    const items = [];
+    for (let i = 0; i < targetFrags.length; i++) {
+      const f = targetFrags[i];
+      const seg = sliceMasterBuffer(f.start, f.end);
+      if (!seg || isAudioBufferSilent(seg)) {
+        autoTranscribedFragKeys.add(getFragTranscribeKey(f));
+        if (!onlyMissing) f.transcript = '';
+        continue;
+      }
+      const base64Wav = audioBufferToWavBase64(seg, 16000);
+      if (base64Wav) {
+        items.push({
+          id: f.id,
+          key: getFragTranscribeKey(f),
+          audio: base64Wav,
+          mimeType: 'audio/wav'
+        });
+      }
+    }
+
+    if (items.length === 0) {
+      transcribeStepper.stop();
+      if (statusPill) statusPill.style.display = 'none';
+      return;
+    }
+
+    const batchSize = 12;
+    let count = 0;
+    const totalBatches = Math.ceil(items.length / batchSize);
+
+    for (let b = 0; b < totalBatches; b++) {
+      const batch = items.slice(b * batchSize, (b + 1) * batchSize);
+      const batchStartPct = 15 + Math.round((b / totalBatches) * 75);
+      const batchEndPct = 15 + Math.round(((b + 1) / totalBatches) * 75);
+      transcribeStepper.setTarget(batchStartPct);
+
+      const res = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: batch.map(({ id, audio, mimeType }) => ({ id, audio, mimeType })) })
+      });
+      const data = await res.json();
+
+      if (data && data.keyMissing) {
+        autoTranscribeKeyMissing = true;
+        transcribeStepper.stop();
+        updateActiveLineTranscriptUI();
+        if (!silent) {
+          showNotice("Gemini API key is not configured in environment. Line scripts can be typed directly.", "info", 4500);
+        }
+        if (statusPill) statusPill.style.display = 'none';
+        return;
+      }
+
+      if (data && data.rateLimited) {
+        const waitSec = data.retryAfterSec || 30;
+        autoTranscribeCooldownUntil = Date.now() + waitSec * 1000;
+        transcribeStepper.stop();
+        updateActiveLineTranscriptUI();
+        renderFragmentList();
+        if (count > 0) {
+          broadcastFragments();
+          persistCurrentSession();
+        }
+        showNotice(data.warning || `Voice-to-Text API quota reached. Try again in ${waitSec}s.`, "warning", 5000);
+        if (statusPill) statusPill.style.display = 'none';
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error || `HTTP error ${res.status}`);
+      }
+
+      batch.forEach(item => {
+        if (item.key) autoTranscribedFragKeys.add(item.key);
+      });
+
+      const results = Array.isArray(data.results) ? data.results : [];
+      results.forEach(item => {
+        const f = state.fragments.find(x => x.id === item.id);
+        if (f) {
+          const text = (item.transcript || '').trim();
+          if (text || !onlyMissing) {
+            f.transcript = text;
+          }
+          if (text) count++;
+        }
+      });
+
+      transcribeStepper.setTarget(batchEndPct);
+      updateActiveLineTranscriptUI();
+      renderFragmentList();
+    }
+
+    await transcribeStepper.finish(100);
+    renderFragmentList();
+    updateActiveLineTranscriptUI();
+    broadcastFragments();
+    persistCurrentSession();
+
+    if (statusText) statusText.textContent = `${count} line${count !== 1 ? 's' : ''} ready`;
+    if (!silent) {
+      showNotice(`Voice-to-Text complete! Generated ${count} line script${count !== 1 ? 's' : ''}.`, "success", 4000);
+    } else if (count > 0) {
+      showNotice(`Auto-transcribed ${count} line${count !== 1 ? 's' : ''} from audio.`, "success", 3200);
+    }
+    setTimeout(() => {
+      if (statusPill) statusPill.style.display = 'none';
+    }, 2200);
+  } catch (err) {
+    transcribeStepper.stop();
+    console.error("Transcribe all fragments error:", err);
+    if (!silent) {
+      showNotice(`Voice-to-Text error: ${err?.message || 'Check network'}`, "error", 5000);
+    }
+    if (statusPill) statusPill.style.display = 'none';
+  } finally {
+    isTranscribing = false;
+    if (v2tBtn) {
+      v2tBtn.classList.remove('is-transcribing');
+      v2tBtn.disabled = false;
+    }
+    if (btnLabel) btnLabel.textContent = 'Voice-to-Text';
   }
 }
 
@@ -1035,10 +2673,21 @@ function listenToTakes(){
             const res = await fetch(data.audio);
             const arr = await res.arrayBuffer();
             const ctx = ensureCtx();
-            const buffer = await ctx.decodeAudioData(arr);
+            let buffer = await ctx.decodeAudioData(arr);
+
+            let normalized = false;
+            let normalizedDb = null;
+            if (settings.get('autoNormalize')) {
+              const targetDb = Number(settings.get('targetPeakDb')) || -1.0;
+              const silenceFloor = Number(settings.get('silenceThresholdDb')) || -42;
+              const norm = normalizeAudioBuffer(ctx, buffer, targetDb, { silenceThresholdDb: silenceFloor });
+              buffer = norm.buffer;
+              normalized = !norm.wasGated;
+              normalizedDb = norm.normalizedPeakDb;
+            }
             
             if(!state.takes[fragId]) state.takes[fragId] = {};
-            state.takes[fragId][uid] = { buffer, trace: data.trace, score: data.score };
+            state.takes[fragId][uid] = { buffer, trace: data.trace, score: data.score, normalized, normalizedDb };
           } catch(err) {
             console.error("Failed to decode remote take:", err);
           }
@@ -1069,13 +2718,18 @@ function renderAssignmentUI(frag){
   const players = state.roomData?.players || (state.me ? [state.me] : []);
   if(players.length === 0) return;
 
-  players.forEach(p => {
+  const isSolo = isSoloSession();
+  players.forEach((p, idx) => {
     const isAssigned = Array.isArray(frag.assigned) && frag.assigned.includes(p.id);
+    let pName = p.name;
+    if (!pName || (isSolo && pName.startsWith('anon'))) {
+      pName = isSolo ? 'Solo Dubber' : getAnonymousPlayerName(idx);
+    }
     const label = document.createElement('label');
     label.className = 'assign-opt';
     label.innerHTML = `
       <input type="checkbox" value="${p.id}" ${isAssigned ? 'checked' : ''}>
-      <span style="color:${p.color || '#B285F5'}">${p.name || 'Player'}</span>
+      <span style="color:${p.color || '#B285F5'}">${pName}</span>
     `;
     
     label.querySelector('input').onchange = async (e) => {
@@ -1094,9 +2748,9 @@ function renderAssignmentUI(frag){
       
       // Update DB
       const updatedFrags = [...state.fragments];
-      const idx = updatedFrags.findIndex(f => f.id === frag.id);
-      if(idx > -1){
-        updatedFrags[idx].assigned = newAssigned;
+      const fIndex = updatedFrags.findIndex(f => f.id === frag.id);
+      if(fIndex > -1){
+        updatedFrags[fIndex].assigned = newAssigned;
         state.fragments = updatedFrags;
         renderAssignmentUI(state.fragments[state.currentIndex]);
         renderFragmentList();
@@ -1124,11 +2778,16 @@ function renderStudioPlayerList(){
   if(!container) return;
   const players = state.roomData?.players || (state.me ? [state.me] : []);
   const hostId = state.roomData?.hostId;
+  const isSolo = isSoloSession();
 
-  container.innerHTML = players.map(p => {
+  container.innerHTML = players.map((p, idx) => {
     const act = state.playerActivities[p.id] || { activity: 'idle' };
     const isMe = p.id === state.uid;
     const isHost = p.id === hostId;
+    let pName = p.name;
+    if (!pName || (isSolo && pName.startsWith('anon'))) {
+      pName = isSolo ? 'Solo Dubber' : getAnonymousPlayerName(idx);
+    }
 
     let badgeClass = '';
     let badgeContent = '';
@@ -1170,9 +2829,9 @@ function renderStudioPlayerList(){
     }
 
     return `
-      <div class="studio-player-badge ${badgeClass}" data-player-id="${p.id}" data-frag-index="${typeof act.fragIndex === 'number' ? act.fragIndex : ''}" title="Click to view ${p.name}'s active line">
+      <div class="studio-player-badge ${badgeClass}" data-player-id="${p.id}" data-frag-index="${typeof act.fragIndex === 'number' ? act.fragIndex : ''}" title="Click to view ${pName}'s active line">
         <div class="p-dot" style="background:${p.color || '#B285F5'}"></div>
-        <span class="p-name">${p.name || 'Player'}${youTag}${hostTag}${scoreTag}</span>
+        <span class="p-name">${pName}${youTag}${hostTag}${scoreTag}</span>
         <span class="p-state">${badgeContent}</span>
       </div>
     `;
@@ -1234,6 +2893,12 @@ function checkRecordAbility(){
 
   const anyTakes = Boolean(state.takes[f.id] && Object.keys(state.takes[f.id]).length > 0);
   el('reviewBtn').disabled = !anyTakes;
+
+  if (!state.isPlaying || state.pb?.mode !== 'record') {
+    if (el('recordBtn') && !el('recordBtn').classList.contains('is-armed')) {
+      el('recordBtn').innerHTML = `Record Take <span class="key-hint">R</span>`;
+    }
+  }
 }
 
 function selectFragment(idx, skipRedraw = false, isRemote = false){
@@ -1262,8 +2927,18 @@ function selectFragment(idx, skipRedraw = false, isRemote = false){
     } catch(e) {}
   }
   
+  const dur = Math.max(0.05, f.end - f.start);
+  if (el('laneCurrTime')) el('laneCurrTime').textContent = '0:00.0';
+  if (el('laneTotalTime')) el('laneTotalTime').textContent = formatTimeSecTenths(dur);
+  if (el('masterCurrTime')) el('masterCurrTime').textContent = formatTimecode(f.start);
+  if (el('masterTotalTime')) el('masterTotalTime').textContent = formatTimecode(state.duration || 1);
+  if (el('masterLineCount')) el('masterLineCount').textContent = `${state.fragments.length} Line${state.fragments.length !== 1 ? 's' : ''}`;
+  updateMasterFragmentsDuration();
+
   renderAssignmentUI(f);
   checkRecordAbility();
+  updateActiveLineTranscriptUI(f);
+  updateActiveFragmentHighlight();
   
   if(!skipRedraw){
     renderFragmentList();
@@ -1325,12 +3000,20 @@ if (el('undoBtn')) {
         renderFragmentList();
         if (state.fragments.length > 0) selectFragment(state.currentIndex, true);
       } else {
+        state.fragments = snap.fragments;
+        state.currentIndex = Math.min(snap.currentIndex, state.fragments.length - 1);
+        renderMasterCanvas();
+        renderFragmentList();
+        if (state.fragments.length > 0) selectFragment(state.currentIndex, true);
+        sendPlaybackEvent({ action: 'sync-fragments', fragments: snap.fragments, activeLineIndex: state.currentIndex });
         const fb = await loadFirebase();
         if(fb && state.roomId){
           const roomRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
-          await fb.updateDoc(roomRef, { fragments: snap.fragments });
+          await fb.updateDoc(roomRef, { fragments: snap.fragments, activeLineIndex: state.currentIndex });
         }
       }
+      updateMasterFragmentsDuration();
+      persistCurrentSession();
       showNotice("Reverted line edit.", "info", 1800);
     } catch(err) {
       console.error("Undo error:", err);
@@ -1349,12 +3032,14 @@ async function mergeWithNext(index) {
     const b = state.fragments[index + 1];
     const assignedSet = new Set([...(a.assigned || []), ...(b.assigned || [])]);
     const newAssigned = Array.from(assignedSet).slice(0, 2);
+    const mergedTranscript = [a.transcript, b.transcript].filter(t => typeof t === 'string' && t.trim()).join(' ');
 
     const merged = { 
       id: 'f_' + Math.random().toString(36).slice(2,8), 
       start: a.start, 
       end: b.end, 
-      assigned: newAssigned 
+      assigned: newAssigned,
+      transcript: mergedTranscript
     };
     
     const newFrags = [...state.fragments];
@@ -1374,6 +3059,7 @@ async function mergeWithNext(index) {
         await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: state.currentIndex });
       }
     }
+    persistCurrentSession();
     showNotice(`Merged Line ${index + 1} with Line ${index + 2}.`, "info", 2000);
   } catch(err) {
     console.error("Merge error:", err);
@@ -1411,8 +3097,8 @@ if (el('masterCanvas')) {
         try {
           saveState();
           
-          const a = { id: 'f_'+Math.random().toString(36).slice(2,6), start: f.start, end: t, assigned: [...(f.assigned || [])] };
-          const b = { id: 'f_'+Math.random().toString(36).slice(2,6), start: t, end: f.end, assigned: [...(f.assigned || [])] };
+          const a = { id: 'f_'+Math.random().toString(36).slice(2,6), start: f.start, end: t, assigned: [...(f.assigned || [])], transcript: f.transcript || '' };
+          const b = { id: 'f_'+Math.random().toString(36).slice(2,6), start: t, end: f.end, assigned: [...(f.assigned || [])], transcript: '' };
           const newFrags = [...state.fragments];
           newFrags.splice(idx, 1, a, b);
           
@@ -1430,6 +3116,10 @@ if (el('masterCanvas')) {
               await fb.updateDoc(roomRef, { fragments: newFrags, activeLineIndex: idx });
             }
           }
+          persistCurrentSession();
+          if (state.masterBuffer) {
+            autoTranscribeMissingFragments({ silent: true });
+          }
         } catch(err) {
           console.error("Split line error:", err);
           showNotice("Could not split line: " + (err?.message || "error"), "error");
@@ -1437,8 +3127,37 @@ if (el('masterCanvas')) {
       }
     } else {
       const idx = state.fragments.findIndex(f => t >= f.start && t <= f.end);
-      if(idx > -1) selectFragment(idx);
+      if(idx > -1) {
+        selectFragment(idx);
+        const v = el('mainVideo');
+        if (v) {
+          try { v.currentTime = t; } catch(err) {}
+        }
+        const f = state.fragments[idx];
+        const ratio = (t - f.start) / Math.max(0.05, f.end - f.start);
+        drawWave(f, Math.max(0, Math.min(1, ratio)));
+        renderMasterCanvas();
+      }
     }
+  };
+}
+
+// Click anywhere on line waveform to scrub and seek playback
+if (el('waveCanvas')) {
+  el('waveCanvas').onclick = (e) => {
+    const f = state.fragments[state.currentIndex];
+    if (!f || state.pb?.mode === 'record') return;
+    const rect = el('waveCanvas').getBoundingClientRect();
+    if (!rect.width) return;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const dur = Math.max(0.05, f.end - f.start);
+    const targetTime = f.start + ratio * dur;
+    const v = el('mainVideo');
+    if (v) {
+      try { v.currentTime = targetTime; } catch(err) {}
+    }
+    drawWave(f, ratio);
+    renderMasterCanvas();
   };
 }
 
@@ -1465,36 +3184,94 @@ function envelopeSlice(frag, pixelWidth){
 
 function drawWave(frag, progress = 0){
   const canvas = el('waveCanvas');
+  if(!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
+  if(!rect.width || !rect.height) return;
   canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(1,0,0,1,0,0);
   ctx.scale(dpr, dpr);
   const w = rect.width, h = rect.height, mid = h/2;
   
-  ctx.fillStyle = '#100C09'; ctx.fillRect(0,0,w,h);
-  
-  // Original
-  const targetEnv = envelopeSlice(frag, Math.round(w));
+  // 1. Dark studio background
+  ctx.fillStyle = '#0D0A08';
+  ctx.fillRect(0,0,w,h);
+
+  const dur = Math.max(0.05, frag.end - frag.start);
+
+  // 2. High-visibility timeline grid & seconds ruler
+  const step = dur <= 2.5 ? 0.5 : dur <= 8 ? 1.0 : 2.0;
+  ctx.font = '500 8.5px JetBrains Mono';
+  ctx.fillStyle = 'rgba(243, 236, 225, 0.35)';
+  ctx.lineWidth = 1;
+  for(let t = 0; t <= dur; t += step){
+    const gx = (t / dur) * w;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.beginPath();
+    ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(243, 236, 225, 0.25)';
+    ctx.beginPath();
+    ctx.moveTo(gx, 0); ctx.lineTo(gx, 4); ctx.stroke();
+    if(gx > 14 && gx < w - 24){
+      ctx.fillText(`${t.toFixed(1)}s`, gx + 3, 11);
+    }
+  }
+
+  // 3. Center dashed baseline
   ctx.beginPath();
-  ctx.strokeStyle = '#5B4A34'; ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 4. Original Audio Waveform (Warm Golden Acoustic Envelope)
+  const targetEnv = envelopeSlice(frag, Math.round(w));
+  // Underfill
+  ctx.beginPath();
   for(let x=0; x<w; x++){
-    const amp = (targetEnv[x] || 0) * (h*0.42);
-    ctx.moveTo(x, mid - amp); ctx.lineTo(x, mid + amp);
+    const amp = (targetEnv[x] || 0) * (h * 0.44);
+    if(x === 0) ctx.moveTo(x, mid - amp);
+    else ctx.lineTo(x, mid - amp);
+  }
+  for(let x=w-1; x>=0; x--){
+    const amp = (targetEnv[x] || 0) * (h * 0.44);
+    ctx.lineTo(x, mid + amp);
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(224, 172, 106, 0.16)';
+  ctx.fill();
+
+  // Vibrant Stroke
+  ctx.beginPath();
+  ctx.strokeStyle = '#E0AC6A';
+  ctx.lineWidth = 1.6;
+  ctx.shadowColor = 'rgba(224, 172, 106, 0.4)';
+  ctx.shadowBlur = 4;
+  for(let x=0; x<w; x++){
+    const amp = (targetEnv[x] || 0) * (h * 0.44);
+    ctx.moveTo(x, mid - amp);
+    ctx.lineTo(x, mid + amp);
   }
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
-  // Draw Takes
+  // 5. Draw Takes (Live & Saved Takes)
   if(state.pb && state.pb.mode === 'record'){
-    // Live trace (in CSS pixels, same units as w, so it lines up under any dpr)
+    // Live trace
     ctx.beginPath();
-    ctx.strokeStyle = state.me?.color || '#B285F5'; ctx.lineWidth = 1.4;
+    ctx.strokeStyle = '#FF453A';
+    ctx.lineWidth = 2.0;
+    ctx.shadowColor = 'rgba(255, 69, 58, 0.55)';
+    ctx.shadowBlur = 6;
     for(let x=0; x<state.liveTrace.length; x++){
-      const amp = (state.liveTrace[x] || 0) * (h*0.42);
-      ctx.moveTo(x, mid - amp); ctx.lineTo(x, mid + amp);
+      const amp = (state.liveTrace[x] || 0) * (h * 0.44);
+      ctx.moveTo(x, mid - amp);
+      ctx.lineTo(x, mid + amp);
     }
     ctx.stroke();
+    ctx.shadowBlur = 0;
   } else {
     // Saved takes
     const takes = state.takes[frag.id] || {};
@@ -1504,22 +3281,50 @@ function drawWave(frag, progress = 0){
       if(takes[uid] && takes[uid].trace){
         const pColor = roomPlayers.find(p => p.id === uid)?.color || '#B285F5';
         ctx.beginPath();
-        ctx.strokeStyle = pColor; ctx.lineWidth = 1.4;
+        ctx.strokeStyle = pColor;
+        ctx.lineWidth = 1.8;
+        ctx.shadowColor = pColor;
+        ctx.shadowBlur = 4;
         for(let x=0; x<takes[uid].trace.length; x++){
-          const amp = (takes[uid].trace[x] || 0) * (h*0.42);
-          ctx.moveTo(x, mid - amp); ctx.lineTo(x, mid + amp);
+          const amp = (takes[uid].trace[x] || 0) * (h * 0.44);
+          ctx.moveTo(x, mid - amp);
+          ctx.lineTo(x, mid + amp);
         }
         ctx.stroke();
+        ctx.shadowBlur = 0;
       }
     });
   }
 
-  // Playhead
+  // 6. Playhead with Glow, Needle, and Top Cap
   if(progress > 0){
-    const px = progress * w;
-    ctx.beginPath(); ctx.strokeStyle = 'rgba(243,236,225,0.6)'; ctx.lineWidth = 1.5;
+    const px = Math.max(0, Math.min(w, progress * w));
+    // Soft bloom
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(178, 133, 245, 0.45)';
+    ctx.lineWidth = 6;
     ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
+
+    // Sharp white needle
+    ctx.beginPath();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
+
+    // Top Triangle Head
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.moveTo(px - 5, 0);
+    ctx.lineTo(px + 5, 0);
+    ctx.lineTo(px, 7);
+    ctx.closePath();
+    ctx.fill();
   }
+
+  // 7. Update Line Readout Header
+  const curLineTime = Math.max(0, progress * dur);
+  if (el('laneCurrTime')) el('laneCurrTime').textContent = formatTimeSecTenths(curLineTime);
+  if (el('laneTotalTime')) el('laneTotalTime').textContent = formatTimeSecTenths(dur);
 }
 
 function getScoreTier(score) {
@@ -1669,36 +3474,154 @@ function updateLaneScoreDisplay(frag) {
 
 function renderMasterCanvas(){
   const canvas = el('masterCanvas');
+  if(!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
+  if(!rect.width || !rect.height) return;
   canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(1,0,0,1,0,0);
   ctx.scale(dpr, dpr);
-  ctx.clearRect(0,0,rect.width,rect.height);
+  const w = rect.width, h = rect.height;
   
-  const dur = state.duration || 1;
+  // 1. Studio Dark Timeline Background
+  ctx.fillStyle = '#0D0A08';
+  ctx.fillRect(0, 0, w, h);
+  
+  const dur = Math.max(0.1, state.duration || 1);
+  const v = el('mainVideo');
+  const currTime = v ? (v.currentTime || 0) : 0;
+  
+  // 2. Audio Envelope Background Overview across full video
+  if(state.envelope && state.envelope.env && state.envelope.env.length > 0){
+    const env = state.envelope.env;
+    const envLen = env.length;
+    const midH = h / 2 + 5;
+    ctx.fillStyle = 'rgba(178, 133, 245, 0.15)';
+    for(let x=0; x<w; x++){
+      const envIdx = Math.min(envLen - 1, Math.floor((x / w) * envLen));
+      const amp = (env[envIdx] || 0) * (h * 0.36);
+      ctx.fillRect(x, midH - amp, 1, Math.max(1, amp * 2));
+    }
+  }
+  
+  // 3. Time Ruler Ticks along the top of master timeline
+  const tickStep = dur > 60 ? 10 : dur > 20 ? 5 : 2;
+  ctx.font = '500 8.5px JetBrains Mono';
+  ctx.fillStyle = 'rgba(243, 236, 225, 0.3)';
+  ctx.strokeStyle = 'rgba(243, 236, 225, 0.15)';
+  ctx.lineWidth = 1;
+  for(let t = 0; t <= dur; t += tickStep){
+    const tx = (t / dur) * w;
+    ctx.beginPath();
+    ctx.moveTo(tx, 0); ctx.lineTo(tx, 5); ctx.stroke();
+    if(tx > 14 && tx < w - 20){
+      const label = `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+      ctx.fillText(label, tx - 10, 11);
+    }
+  }
+  
+  // 4. Line/Fragment Blocks with High-Contrast Status
   state.fragments.forEach((f, i) => {
-    const x0 = (f.start/dur) * rect.width, x1 = (f.end/dur) * rect.width;
-    const isDone = f.assigned.length > 0 && f.assigned.every(id => state.takes[f.id] && state.takes[f.id][id]);
+    const x0 = Math.max(0, (f.start / dur) * w);
+    const x1 = Math.min(w, (f.end / dur) * w);
+    const blockW = Math.max(2, x1 - x0);
+    const isCur = i === state.currentIndex;
+    const isDone = Array.isArray(f.assigned) && f.assigned.length > 0 && f.assigned.every(id => state.takes[f.id] && state.takes[f.id][id]);
     
-    ctx.fillStyle = isDone ? 'rgba(16,185,129,0.2)' : 'rgba(122,108,92,0.14)';
-    ctx.fillRect(x0+1, 2, Math.max(1,x1-x0-2), rect.height-4);
-    ctx.strokeStyle = i === state.currentIndex ? '#E8A33D' : '#3B2F24';
-    ctx.lineWidth = i === state.currentIndex ? 2 : 1;
-    ctx.strokeRect(x0+1, 2, Math.max(1,x1-x0-2), rect.height-4);
+    // Fill
+    if(isCur){
+      ctx.fillStyle = 'rgba(232, 163, 61, 0.32)';
+    } else if(isDone){
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+    } else {
+      ctx.fillStyle = 'rgba(178, 133, 245, 0.10)';
+    }
+    ctx.fillRect(x0 + 1, 14, Math.max(1, blockW - 2), h - 16);
+    
+    // Border
+    if(isCur){
+      ctx.strokeStyle = '#E8A33D';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(232, 163, 61, 0.6)';
+      ctx.shadowBlur = 6;
+    } else if(isDone){
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+      ctx.lineWidth = 1.2;
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.strokeStyle = 'rgba(178, 133, 245, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = 0;
+    }
+    ctx.strokeRect(x0 + 1, 14, Math.max(1, blockW - 2), h - 16);
+    ctx.shadowBlur = 0;
+    
+    // Line Number Badge inside block if wide enough
+    if(blockW > 18){
+      ctx.fillStyle = isCur ? '#FFFFFF' : isDone ? '#79F2B8' : 'rgba(243, 236, 225, 0.7)';
+      ctx.font = isCur ? '700 9.5px JetBrains Mono' : '600 9px JetBrains Mono';
+      ctx.fillText(`L${i+1}`, x0 + 4, h - 5);
+    }
   });
+  
+  // 5. Real-Time Master Playhead Needle
+  if(dur > 0 && currTime >= 0){
+    const playX = Math.max(0, Math.min(w, (currTime / dur) * w));
+    // Playhead line
+    ctx.beginPath();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = 'rgba(178, 133, 245, 0.8)';
+    ctx.shadowBlur = 6;
+    ctx.moveTo(playX, 0); ctx.lineTo(playX, h); ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    // Top Playhead Diamond Marker
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.moveTo(playX, 0);
+    ctx.lineTo(playX + 4, 5);
+    ctx.lineTo(playX, 10);
+    ctx.lineTo(playX - 4, 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  
+  // 6. Sync Master Header Info
+  if(el('masterCurrTime')) el('masterCurrTime').textContent = formatTimecode(currTime);
+  if(el('masterTotalTime')) el('masterTotalTime').textContent = formatTimecode(dur);
+  if(el('masterLineCount')) el('masterLineCount').textContent = `${state.fragments.length} Line${state.fragments.length !== 1 ? 's' : ''}`;
+  updateMasterFragmentsDuration();
 }
 
 function renderFragmentList(){
   const list = el('fragmentList');
+  updateMasterFragmentsDuration();
   if(!list) return;
   list.innerHTML = '';
   const roomPlayers = state.roomData?.players || (state.me ? [state.me] : []);
+  const isPlaying = Boolean(state.isPlaying && !state.paused);
+  const isRec = Boolean(isPlaying && state.pb?.mode === 'record');
+  const isPlay = Boolean(isPlaying && state.pb?.mode !== 'record');
 
   state.fragments.forEach((f, i) => {
+    const isCurrent = (i === state.currentIndex);
+    let rowClasses = 'frag-row';
+    let activeTagHTML = '';
+    if (isCurrent) {
+      rowClasses += ' active';
+      if (isRec) {
+        rowClasses += ' is-recording';
+        activeTagHTML = '<span class="frag-active-indicator rec-tag"><span class="dot"></span>REC</span>';
+      } else if (isPlay) {
+        rowClasses += ' is-playing';
+        activeTagHTML = '<span class="frag-active-indicator play-tag">PLAYING</span>';
+      }
+    }
+
     const row = document.createElement('div');
-    row.className = 'frag-row' + (i === state.currentIndex ? ' active' : '');
+    row.className = rowClasses;
     
     let assignHTML = '';
     const assignedList = Array.isArray(f.assigned) ? f.assigned : [];
@@ -1733,11 +3656,17 @@ function renderFragmentList(){
     row.innerHTML = `
       <span class="frag-num">${String(i+1).padStart(2,'0')}</span>
       <div class="frag-info">
-        <span class="frag-time">${f.start.toFixed(1)}s - ${f.end.toFixed(1)}s</span>
-        <div class="frag-assignees">${assignHTML}</div>
+        <div class="frag-top-line">
+          <div style="display:inline-flex; align-items:center;">
+            <span class="frag-time">${f.start.toFixed(1)}s - ${f.end.toFixed(1)}s</span>
+            ${activeTagHTML}
+          </div>
+          <div class="frag-assignees">${assignHTML}</div>
+        </div>
         ${liveRecHTML}
       </div>
     `;
+
     row.onclick = () => selectFragment(i);
     list.appendChild(row);
 
@@ -1752,6 +3681,187 @@ function renderFragmentList(){
       list.appendChild(mergeRow);
     }
   });
+}
+
+function updateActiveFragmentHighlight() {
+  const rows = document.querySelectorAll('.frag-row');
+  const isPlaying = Boolean(state.isPlaying && !state.paused);
+  const isRec = Boolean(isPlaying && state.pb?.mode === 'record');
+  const isPlay = Boolean(isPlaying && state.pb?.mode !== 'record');
+
+  rows.forEach((row, i) => {
+    const isCurrent = (i === state.currentIndex);
+    row.classList.toggle('active', isCurrent);
+    row.classList.toggle('is-recording', isCurrent && isRec);
+    row.classList.toggle('is-playing', isCurrent && isPlay);
+
+    let tag = row.querySelector('.frag-active-indicator');
+    if (isCurrent && isRec) {
+      if (!tag) {
+        tag = document.createElement('span');
+        const timeWrap = row.querySelector('.frag-top-line > div:first-child');
+        if (timeWrap) timeWrap.appendChild(tag);
+      }
+      tag.className = 'frag-active-indicator rec-tag';
+      tag.innerHTML = '<span class="dot"></span>REC';
+    } else if (isCurrent && isPlay) {
+      if (!tag) {
+        tag = document.createElement('span');
+        const timeWrap = row.querySelector('.frag-top-line > div:first-child');
+        if (timeWrap) timeWrap.appendChild(tag);
+      }
+      tag.className = 'frag-active-indicator play-tag';
+      tag.textContent = 'PLAYING';
+    } else if (tag) {
+      tag.remove();
+    }
+  });
+}
+
+function formatSrtTimestamp(seconds) {
+  const s = Math.max(0, seconds || 0);
+  const hrs = Math.floor(s / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = Math.floor(s % 60);
+  const ms = Math.floor((s - Math.floor(s)) * 1000);
+  const pad = (n, len = 2) => String(n).padStart(len, '0');
+  return `${pad(hrs)}:${pad(mins)}:${pad(secs)},${pad(ms, 3)}`;
+}
+
+let isExportingScript = false;
+
+async function exportTimelineTranscript(format = 'txt') {
+  if (isExportingScript) return;
+  if (!state.fragments || state.fragments.length === 0) {
+    return showNotice("No timeline lines available to export.", "warning");
+  }
+
+  const btn = el('exportTranscriptBtn');
+  const progressFill = el('exportTranscriptProgressFill');
+  const spinner = el('exportTranscriptSpinner');
+  const icon = el('exportTranscriptIcon');
+  const chevron = el('exportTranscriptChevron');
+  const btnText = el('exportTranscriptBtnText');
+  const extLabel = format === 'srt' ? '.SRT' : '.TXT';
+
+  isExportingScript = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.remove('is-exported');
+    btn.classList.add('is-exporting');
+  }
+  if (icon) icon.style.display = 'none';
+  if (chevron) chevron.style.display = 'none';
+  if (spinner) spinner.style.display = 'inline-block';
+  if (progressFill) progressFill.style.width = '0%';
+  if (btnText) btnText.textContent = `Preparing ${extLabel} 0%`;
+
+  const exportStepper = createProgressStepper({
+    fillEl: progressFill,
+    onStep: (pct) => {
+      if (btnText) btnText.textContent = `Preparing ${extLabel} ${pct}%`;
+    },
+    minStepMs: 4,
+    maxStepMs: 7
+  });
+
+  try {
+    const baseFileName = (state.file?.name || state.roomData?.videoName || 'timeline-transcript')
+      .replace(/\.[^/.]+$/, '');
+    const roomPlayers = state.roomData?.players || (state.me ? [state.me] : []);
+    exportStepper.setTarget(35);
+
+    let fileBlob;
+    let downloadName;
+
+    if (format === 'srt') {
+      let srtContent = '';
+      state.fragments.forEach((f, idx) => {
+        const seq = idx + 1;
+        const startSrt = formatSrtTimestamp(f.start);
+        const endSrt = formatSrtTimestamp(f.end);
+        const text = (f.transcript && f.transcript.trim()) ? f.transcript.trim() : `[Line ${seq}]`;
+        srtContent += `${seq}\n${startSrt} --> ${endSrt}\n${text}\n\n`;
+      });
+      exportStepper.setTarget(75);
+      fileBlob = new Blob([srtContent], { type: 'text/srt;charset=utf-8' });
+      downloadName = `${baseFileName}-subtitles.srt`;
+    } else {
+      const now = new Date().toLocaleString();
+      let txtContent = `Loop Booth - Full Master Timeline Transcript\n`;
+      txtContent += `File: ${baseFileName}\n`;
+      txtContent += `Date: ${now}\n`;
+      txtContent += `Total Lines: ${state.fragments.length}\n`;
+      txtContent += `Duration: ${formatTimecode(state.duration || 0)}\n`;
+      txtContent += `==================================================\n\n`;
+
+      state.fragments.forEach((f, idx) => {
+        const lineNum = String(idx + 1).padStart(2, '0');
+        const start = f.start.toFixed(1);
+        const end = f.end.toFixed(1);
+        const assigned = Array.isArray(f.assigned) ? f.assigned : [];
+        let speakerNames = 'Unassigned';
+        if (assigned.length > 0) {
+          speakerNames = assigned.map(uid => {
+            const p = roomPlayers.find(x => x.id === uid);
+            return p ? p.name : (uid === state.uid ? (state.me?.name || 'You') : 'Player');
+          }).join(', ');
+        }
+        const text = (f.transcript && f.transcript.trim()) ? f.transcript.trim() : `[No dialogue transcribed]`;
+        txtContent += `[${lineNum}] ${start}s - ${end}s | Speaker: ${speakerNames}\n`;
+        txtContent += `${text}\n\n`;
+      });
+      exportStepper.setTarget(75);
+      fileBlob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+      downloadName = `${baseFileName}-transcript.txt`;
+    }
+
+    await exportStepper.finish(100);
+
+    const url = URL.createObjectURL(fileBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = downloadName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    if (spinner) spinner.style.display = 'none';
+    if (btn) {
+      btn.classList.remove('is-exporting');
+      btn.classList.add('is-exported');
+    }
+    if (btnText) btnText.textContent = `Saved ${extLabel}`;
+    showNotice(
+      format === 'srt'
+        ? `Exported transcript as .srt subtitles! (${state.fragments.length} lines)`
+        : `Exported transcript as .txt file! (${state.fragments.length} lines)`,
+      "success",
+      4000
+    );
+
+    setTimeout(() => {
+      if (btn) btn.classList.remove('is-exported');
+      if (progressFill) progressFill.style.width = '0%';
+      if (icon) icon.style.display = '';
+      if (chevron) chevron.style.display = '';
+      if (btnText) btnText.textContent = 'Export Script';
+    }, 1500);
+  } catch (err) {
+    exportStepper.stop();
+    console.error("Transcript export error:", err);
+    showNotice("Failed to export transcript: " + (err?.message || "unknown error"), "error");
+    if (spinner) spinner.style.display = 'none';
+    if (progressFill) progressFill.style.width = '0%';
+    if (icon) icon.style.display = '';
+    if (chevron) chevron.style.display = '';
+    if (btnText) btnText.textContent = 'Export Script';
+    if (btn) btn.classList.remove('is-exporting', 'is-exported');
+  } finally {
+    isExportingScript = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 function setPauseButton(mode){
@@ -1834,9 +3944,21 @@ function handleRoomEvent(event){
         const res = await fetch(event.audio);
         const arr = await res.arrayBuffer();
         const ctx = ensureCtx();
-        const buffer = await ctx.decodeAudioData(arr);
+        let buffer = await ctx.decodeAudioData(arr);
+
+        let normalized = false;
+        let normalizedDb = null;
+        if (settings.get('autoNormalize')) {
+          const targetDb = Number(settings.get('targetPeakDb')) || -1.0;
+          const silenceFloor = Number(settings.get('silenceThresholdDb')) || -42;
+          const norm = normalizeAudioBuffer(ctx, buffer, targetDb, { silenceThresholdDb: silenceFloor });
+          buffer = norm.buffer;
+          normalized = !norm.wasGated;
+          normalizedDb = norm.normalizedPeakDb;
+        }
+
         if(!state.takes[event.fragId]) state.takes[event.fragId] = {};
-        state.takes[event.fragId][event.uid] = { buffer, trace: event.trace, score: event.score || 0 };
+        state.takes[event.fragId][event.uid] = { buffer, trace: event.trace, score: event.score || 0, normalized, normalizedDb };
         renderFragmentList();
         renderMasterCanvas();
         renderStudioPlayerList();
@@ -1882,8 +4004,22 @@ function startReviewSources(pb, offsetSeconds){
   const takes = state.takes[pb.frag.id] || {};
   pb.sources = [];
   const allTakeUids = new Set([...(pb.frag.assigned || []), ...Object.keys(takes)]);
+  const isAutoNorm = Boolean(settings.get('autoNormalize'));
+  const targetDb = Number(settings.get('targetPeakDb')) || -1.0;
+  const silenceFloor = Number(settings.get('silenceThresholdDb')) || -42;
+
   allTakeUids.forEach(uid => {
     if(takes[uid] && takes[uid].buffer){
+      if (isAutoNorm && !takes[uid].normalized) {
+        try {
+          const norm = normalizeAudioBuffer(ctx, takes[uid].buffer, targetDb, { silenceThresholdDb: silenceFloor });
+          takes[uid].buffer = norm.buffer;
+          takes[uid].normalized = true;
+          takes[uid].normalizedDb = norm.normalizedPeakDb;
+        } catch(e) {
+          console.warn("Failed to auto-normalize take on playback:", e);
+        }
+      }
       const src = ctx.createBufferSource();
       src.buffer = takes[uid].buffer;
       src.connect(ctx.destination);
@@ -1990,6 +4126,18 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
       pb.recorder.start();
       el('monitorBadgeText').textContent = "Recording"; el('monitorBadge').classList.add('live');
       el('recordBtn').classList.add('is-armed');
+      el('recordBtn').classList.add('is-recording');
+      el('recordBtn').innerHTML = `<span class="rec-dot-pulse" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fff;margin-right:6px;animation:rec-pulse 0.7s infinite alternate;"></span>Recording... <span class="key-hint">R</span>`;
+
+      // Visual Recording HUD Timer & Real-Time Progress in .monitor
+      if (el('monitorRecTimer')) el('monitorRecTimer').style.display = 'inline-flex';
+      if (el('monitorRecBar')) el('monitorRecBar').style.display = 'block';
+      if (el('studioMonitor')) el('studioMonitor').classList.add('is-recording');
+      if (el('monitorRecTime')) el('monitorRecTime').textContent = '0:00.0';
+      const lineDur = Math.max(0.05, f.end - f.start);
+      if (el('monitorRecTarget')) el('monitorRecTarget').textContent = `/ ${formatTimeSecTenths(lineDur)}`;
+      if (el('monitorRecBarFill')) el('monitorRecBarFill').style.width = '0%';
+
       if(!isRemote) broadcastMyActivity('recording', f.id, state.currentIndex);
     } catch(recErr) {
       console.error("Audio recording start error:", recErr);
@@ -2009,6 +4157,8 @@ async function playFragment(mode, isRemote = false, remoteLabel = '', startPosit
 
   state.isPlaying = true; state.paused = false;
   setPauseButton('playing');
+  updateActiveFragmentHighlight();
+  updateMonitorSubtitle();
 
   const onPlaying = () => {
     if(state.pb === pb) pb.hasPlayed = true;
@@ -2045,16 +4195,24 @@ function runLoop(){
     const dur = Math.max(0.05, f.end - f.start);
     const progress = Math.min(1, Math.max(0, v.currentTime - f.start) / dur);
     
-    if(pb.mode === 'record' && pb.analyser){
-      const data = new Uint8Array(pb.analyser.fftSize);
-      pb.analyser.getByteTimeDomainData(data);
-      let sum = 0; for(let i=0;i<data.length;i++) sum += Math.pow((data[i]-128)/128, 2);
-      const rms = Math.sqrt(sum/data.length);
-      const idx = Math.min(state.liveTrace.length-1, Math.floor(progress * state.liveTrace.length));
-      state.liveTrace[idx] = Math.min(1, rms * 2.2);
+    if(pb.mode === 'record'){
+      const elapsed = Math.max(0, (performance.now() - pb.startedAt) / 1000);
+      const recPercent = Math.min(100, (elapsed / dur) * 100);
+      if(el('monitorRecTime')) el('monitorRecTime').textContent = formatTimeSecTenths(elapsed);
+      if(el('monitorRecBarFill')) el('monitorRecBarFill').style.width = `${recPercent}%`;
+
+      if(pb.analyser){
+        const data = new Uint8Array(pb.analyser.fftSize);
+        pb.analyser.getByteTimeDomainData(data);
+        let sum = 0; for(let i=0;i<data.length;i++) sum += Math.pow((data[i]-128)/128, 2);
+        const rms = Math.sqrt(sum/data.length);
+        const idx = Math.min(state.liveTrace.length-1, Math.floor(progress * state.liveTrace.length));
+        state.liveTrace[idx] = Math.min(1, rms * 2.2);
+      }
     }
     
     drawWave(f, progress);
+    renderMasterCanvas();
     
     const elapsed = (performance.now() - pb.startedAt) / 1000;
     const hasStarted = pb.hasPlayed || elapsed > 0.25;
@@ -2080,16 +4238,20 @@ function pausePlayback(isRemote = false){
   v.pause();
   if(pb.mode === 'record' && pb.recorder && pb.recorder.state === 'recording'){
     try{ pb.recorder.pause(); }catch(e){}
+    const statusTag = el('monitorRecTimer')?.querySelector('.rec-status-tag');
+    if (statusTag) statusTag.textContent = 'PAUSED';
   }
   if(pb.mode === 'review' && pb.sources && pb.sources.length){
     const ctx = ensureCtx();
     const elapsed = ctx.currentTime - pb.sourcesStartedAtCtxTime;
     pb.sourcesOffsetAtStart = pb.sourcesOffsetAtStart + elapsed;
-    pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
+    pb.sources && pb.sources.forEach(s => { try{ s.stop(); }catch(e){} });
     pb.sources = [];
   }
   el('monitorBadgeText').textContent = "Paused"; el('monitorBadge').classList.remove('live');
   setPauseButton('paused');
+  updateActiveFragmentHighlight();
+  updateMonitorSubtitle();
   if(!isRemote){
     broadcastMyActivity('paused', pb?.frag?.id, state.currentIndex);
     sendPlaybackEvent({ action:'pause', fragmentId:pb.frag.id, position:Math.max(0, v.currentTime - pb.frag.start) });
@@ -2104,6 +4266,8 @@ function resumePlayback(isRemote = false){
   if(pb.mode === 'record' && pb.recorder && pb.recorder.state === 'paused'){
     try{ pb.recorder.resume(); }catch(e){}
     el('monitorBadgeText').textContent = "Recording"; el('monitorBadge').classList.add('live');
+    const statusTag = el('monitorRecTimer')?.querySelector('.rec-status-tag');
+    if (statusTag) statusTag.textContent = 'REC';
     if(!isRemote) broadcastMyActivity('recording', pb?.frag?.id, state.currentIndex);
   } else if(pb.mode === 'review'){
     startReviewSources(pb, pb.sourcesOffsetAtStart || 0);
@@ -2116,6 +4280,8 @@ function resumePlayback(isRemote = false){
   v.playbackRate = 1;
   v.play();
   setPauseButton('playing');
+  updateActiveFragmentHighlight();
+  updateMonitorSubtitle();
   runLoop();
   if(!isRemote) sendPlaybackEvent({ action:'resume', fragmentId:pb.frag.id, position:Math.max(0, v.currentTime - pb.frag.start) });
 }
@@ -2134,7 +4300,17 @@ function finishPlayback(isRemote = false){
   v.pause();
   el('monitorBadgeText').textContent = "Idle"; el('monitorBadge').classList.remove('live');
   el('recordBtn').classList.remove('is-armed');
+  el('recordBtn').classList.remove('is-recording');
+  el('recordBtn').innerHTML = `Record Take <span class="key-hint">R</span>`;
+
+  // Reset recording HUD in monitor
+  if (el('monitorRecTimer')) el('monitorRecTimer').style.display = 'none';
+  if (el('monitorRecBar')) el('monitorRecBar').style.display = 'none';
+  if (el('studioMonitor')) el('studioMonitor').classList.remove('is-recording');
+
   setPauseButton('idle');
+  updateActiveFragmentHighlight();
+  updateMonitorSubtitle();
   if(!isRemote) broadcastMyActivity('idle');
   
   const pb = state.pb;
@@ -2154,7 +4330,19 @@ function finishPlayback(isRemote = false){
           // Decode locally immediately for instant feedback
           const arr = await blob.arrayBuffer();
           const ctx = ensureCtx();
-          const buffer = await ctx.decodeAudioData(arr);
+          let buffer = await ctx.decodeAudioData(arr);
+
+          // Auto-Normalization
+          let wasNormalized = false;
+          let normalizedDb = null;
+          if (settings.get('autoNormalize')) {
+            const targetDb = Number(settings.get('targetPeakDb')) || -1.0;
+            const silenceFloor = Number(settings.get('silenceThresholdDb')) || -42;
+            const norm = normalizeAudioBuffer(ctx, buffer, targetDb, { silenceThresholdDb: silenceFloor });
+            buffer = norm.buffer;
+            wasNormalized = !norm.wasGated;
+            normalizedDb = norm.normalizedPeakDb;
+          }
 
           let takeScore = 0;
           if (state.scoringMode) {
@@ -2162,7 +4350,7 @@ function finishPlayback(isRemote = false){
           }
 
           if(!state.takes[fragId]) state.takes[fragId] = {};
-          state.takes[fragId][state.uid] = { buffer, trace, score: takeScore };
+          state.takes[fragId][state.uid] = { buffer, trace, score: takeScore, normalized: wasNormalized, normalizedDb };
           renderFragmentList();
           renderMasterCanvas();
           renderStudioPlayerList();
@@ -2171,10 +4359,21 @@ function finishPlayback(isRemote = false){
             updateLaneScoreDisplay(state.fragments[state.currentIndex]);
           }
           checkRecordAbility();
+          persistCurrentSession();
 
           if (state.scoringMode) {
             const tierInfo = getScoreTier(takeScore);
             showNotice(`★ Wave Match: ${takeScore}% (${tierInfo.label})`, tierInfo.toastType, 3600);
+          } else if (wasNormalized) {
+            showNotice(`Take leveled to ${normalizedDb} dBFS`, "info", 2000);
+          }
+
+          if (settings.get('autoAdvance') && state.currentIndex < state.fragments.length - 1) {
+            setTimeout(() => {
+              if (!state.isPlaying && !state.paused) {
+                selectFragment(state.currentIndex + 1);
+              }
+            }, 600);
           }
         } catch(decErr) {
           console.error("Local take decode error:", decErr);
@@ -2242,7 +4441,17 @@ function stopPlayback(isRemote = false){
   state.pb = null;
   el('monitorBadgeText').textContent = "Idle"; el('monitorBadge').classList.remove('live');
   el('recordBtn').classList.remove('is-armed');
+  el('recordBtn').classList.remove('is-recording');
+  el('recordBtn').innerHTML = `Record Take <span class="key-hint">R</span>`;
+
+  // Reset recording HUD in monitor
+  if (el('monitorRecTimer')) el('monitorRecTimer').style.display = 'none';
+  if (el('monitorRecBar')) el('monitorRecBar').style.display = 'none';
+  if (el('studioMonitor')) el('studioMonitor').classList.remove('is-recording');
+
   setPauseButton('idle');
+  updateActiveFragmentHighlight();
+  updateMonitorSubtitle();
   if(!isRemote){
     broadcastMyActivity('idle');
     sendPlaybackEvent({ action:'stop' });
@@ -2301,6 +4510,93 @@ if (el('reviewBtn')) {
   };
 }
 
+if (el('voiceToTextBtn')) {
+  el('voiceToTextBtn').onclick = (e) => {
+    if (e.shiftKey) {
+      transcribeAllFragments();
+    } else {
+      transcribeActiveLine();
+    }
+  };
+}
+
+const activeLineTranscriptEl = el('activeLineTranscriptText');
+if (activeLineTranscriptEl) {
+  activeLineTranscriptEl.addEventListener('focus', () => {
+    const f = state.fragments[state.currentIndex];
+    if (!f || !f.transcript) {
+      activeLineTranscriptEl.textContent = '';
+      activeLineTranscriptEl.style.fontStyle = 'normal';
+      activeLineTranscriptEl.style.color = '#F5EDFF';
+    }
+  });
+
+  activeLineTranscriptEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      activeLineTranscriptEl.blur();
+    }
+  });
+
+  activeLineTranscriptEl.addEventListener('blur', () => {
+    const f = state.fragments[state.currentIndex];
+    if (!f) return;
+    const val = activeLineTranscriptEl.textContent.trim();
+    const isPlaceholder = !val || 
+      val === 'Click Voice-to-Text or click to type script...' ||
+      val === 'Click Voice-to-Text or type script here...' ||
+      val === 'No transcript generated yet. Click "Voice-to-Text" to transcribe.' ||
+      val === 'Select a line or click Transcribe to generate...';
+
+    if (!isPlaceholder) {
+      f.transcript = val;
+    } else {
+      f.transcript = '';
+    }
+    updateActiveLineTranscriptUI(f);
+    broadcastFragments(state.fragments);
+    persistCurrentSession();
+  });
+}
+
+const exportScriptBtn = el('exportTranscriptBtn');
+const exportScriptMenu = el('exportTranscriptMenu');
+if (exportScriptBtn && exportScriptMenu) {
+  exportScriptBtn.onclick = (e) => {
+    e.stopPropagation();
+    const isShown = exportScriptMenu.style.display !== 'none';
+    exportScriptMenu.style.display = isShown ? 'none' : 'flex';
+  };
+
+  if (el('exportTranscriptTxtBtn')) {
+    el('exportTranscriptTxtBtn').onclick = (e) => {
+      e.stopPropagation();
+      exportScriptMenu.style.display = 'none';
+      exportTimelineTranscript('txt');
+    };
+  }
+
+  if (el('exportTranscriptSrtBtn')) {
+    el('exportTranscriptSrtBtn').onclick = (e) => {
+      e.stopPropagation();
+      exportScriptMenu.style.display = 'none';
+      exportTimelineTranscript('srt');
+    };
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!el('exportTranscriptDropdownWrap')?.contains(e.target)) {
+      if (exportScriptMenu) exportScriptMenu.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && exportScriptMenu && exportScriptMenu.style.display !== 'none') {
+      exportScriptMenu.style.display = 'none';
+    }
+  });
+}
+
 if (el('renderBtn')) {
   el('renderBtn').onclick = async () => {
   const v = el('mainVideo');
@@ -2315,10 +4611,16 @@ if (el('renderBtn')) {
   }
   
   stopPlayback();
-  el('renderBtn').disabled = true;
+  const renderBtn = el('renderBtn');
+  if (renderBtn) {
+    renderBtn.classList.remove('is-success');
+    renderBtn.disabled = true;
+    renderBtn.textContent = 'Rendering Dub...';
+  }
   el('renderProgress').classList.add('show');
   el('downloadLink').classList.remove('show');
   
+  let renderStepper = null;
   try {
     const ctx = ensureCtx();
     if(ctx.state === 'suspended') await ctx.resume().catch(() => {});
@@ -2365,15 +4667,26 @@ if (el('renderBtn')) {
       bgSrc.start(t0);
     }
     
+    const latencySec = (Number(settings.get('micLatencyMs')) || 0) / 1000;
+    const isAutoNorm = Boolean(settings.get('autoNormalize'));
+    const targetDb = Number(settings.get('targetPeakDb')) || -1.0;
+    const silenceFloor = Number(settings.get('silenceThresholdDb')) || -42;
+
     state.fragments.forEach(f => {
       const takes = state.takes[f.id] || {};
       const assignedWithTakes = (f.assigned || []).filter(uid => takes[uid]);
       if(assignedWithTakes.length > 0){
         assignedWithTakes.forEach(uid => {
           const src = ctx.createBufferSource();
-          src.buffer = takes[uid].buffer;
+          let buf = takes[uid].buffer;
+          if (isAutoNorm && buf) {
+            const norm = normalizeAudioBuffer(ctx, buf, targetDb, { silenceThresholdDb: silenceFloor });
+            buf = norm.buffer;
+          }
+          src.buffer = buf;
           src.connect(dest);
-          src.start(t0 + f.start);
+          const startTime = Math.max(0, t0 + f.start + latencySec);
+          src.start(startTime);
         });
       } else {
         const seg = sliceMasterBuffer(f.start, f.end);
@@ -2388,12 +4701,20 @@ if (el('renderBtn')) {
     
     await v.play().catch(e => console.warn("Export playback warning:", e));
     const dur = state.duration || 1;
+    renderStepper = createProgressStepper({
+      fillEl: el('renderProgressFill'),
+      initial: 0,
+      minStepMs: 5,
+      maxStepMs: 14
+    });
     const timer = setInterval(() => {
-      el('renderProgressFill').style.width = Math.min(100, (v.currentTime/dur)*100) + '%';
-    }, 100);
+      const pct = Math.min(99, Math.floor((v.currentTime / dur) * 100));
+      renderStepper.setTarget(pct);
+    }, 50);
     
     await new Promise(r => { v.onended = r; setTimeout(r, dur*1000 + 1000); });
-    clearInterval(timer); el('renderProgressFill').style.width = '100%';
+    clearInterval(timer);
+    await renderStepper.finish(100);
     if(recorder.state !== 'inactive') recorder.stop();
     await finished;
     
@@ -2402,16 +4723,69 @@ if (el('renderBtn')) {
     el('downloadLink').href = URL.createObjectURL(blob);
     el('downloadLink').download = isMp4 ? 'loop-booth-dub.mp4' : 'loop-booth-dub.webm';
     el('downloadLink').classList.add('show');
-    el('renderBtn').disabled = false;
+    
+    // Add success state to renderBtn informing user the file is ready to save
+    if (renderBtn) {
+      renderBtn.disabled = false;
+      renderBtn.classList.add('is-success');
+      renderBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;margin-right:4px;display:inline-block;vertical-align:-2px;">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        Ready to Save!
+      `;
+      setTimeout(() => {
+        if (renderBtn && renderBtn.classList.contains('is-success')) {
+          renderBtn.classList.remove('is-success');
+          renderBtn.textContent = 'Print Final Dub';
+        }
+      }, 7000);
+    }
+
+    // Save completed dub snapshot into persistent Saved Dubs collection
+    let scoreSum = 0, scoredCount = 0;
+    for (const fId in state.takes) {
+      for (const uid in state.takes[fId]) {
+        const s = state.takes[fId][uid]?.score;
+        if (typeof s === 'number' && s > 0) { scoreSum += s; scoredCount++; }
+      }
+    }
+    const avgScore = scoredCount > 0 ? Math.round(scoreSum / scoredCount) : null;
+
+    saveCompletedDub({
+      roomId: state.roomId,
+      isSingleplayer: Boolean(state.isSingleplayer),
+      isExported: true,
+      title: (state.file?.name || state.videoSyncedName || 'Loop Booth Dub').replace(/\.[^/.]+$/, "") + " (Finished Dub)",
+      videoName: state.file?.name || state.videoSyncedName || 'Finished Clip',
+      videoSize: state.file?.size ? formatFileSize(state.file.size) : null,
+      duration: state.duration || 0,
+      collaborators: extractCollaborators(state.players, state.takes, state.isSingleplayer, state.uid),
+      linesCount: state.fragments.length,
+      completedLines: state.fragments.filter(f => state.takes[f.id] && Object.keys(state.takes[f.id]).length > 0).length,
+      takesCount: Object.values(state.takes).reduce((acc, t) => acc + Object.keys(t).length, 0),
+      scoringMode: Boolean(state.scoringMode),
+      avgScore,
+      audioNormalized: Boolean(settings.get('autoNormalize')),
+      exportUrl: el('downloadLink').href,
+      fragments: state.fragments
+    });
+    persistCurrentSession();
+
     el('renderStatus').textContent = usedFallback
       ? 'Done - mono source, background bed includes original voice.'
       : 'Done - background audio carried through with voice removed.';
     setTimeout(() => el('renderProgress').classList.remove('show'), 1000);
-    showNotice("Dub exported successfully! Click Download.", "success", 3500);
+    showNotice("Dub export complete! Your file is ready to save. Click 'Download Final'.", "success", 5000);
   } catch(err) {
+    if (renderStepper) renderStepper.stop();
     console.error("Export render error:", err);
     showNotice("Failed to export dub: " + (err?.message || "Render error"), "error");
-    if (el('renderBtn')) el('renderBtn').disabled = false;
+    if (renderBtn) {
+      renderBtn.disabled = false;
+      renderBtn.classList.remove('is-success');
+      renderBtn.textContent = 'Print Final Dub';
+    }
     if (el('renderProgress')) el('renderProgress').classList.remove('show');
   }
   };

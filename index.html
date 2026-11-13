@@ -30,38 +30,317 @@
   </div>
 </div>
 
-<div id="setupScreen" class="screen active">
-  <span class="version-footer" aria-label="Application version">v1.0.7</span>
-  <button class="btn btn-ghost" id="savedDubsBtn" style="position: absolute; bottom: 20px; right: 20px; font-size: 13px;">Saved Dubs</button>
-  <div class="setup-card">
-    <div style="display:flex; justify-content:center; gap:10px; margin-bottom: 20px;">
-      <div style="width:12px; height:12px; border-radius:50%; background:var(--p1-color);"></div>
-      <div style="width:12px; height:12px; border-radius:50%; background:var(--p2-color);"></div>
-      <div style="width:12px; height:12px; border-radius:50%; background:var(--p3-color);"></div>
-      <div style="width:12px; height:12px; border-radius:50%; background:var(--p4-color);"></div>
+<!-- Settings Modal Overlay -->
+<div class="modal-overlay" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+  <div class="settings-modal-card">
+    <div class="settings-header">
+      <div class="settings-title-group">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <h2 id="settingsModalTitle">Studio Settings</h2>
+      </div>
+      <button class="btn btn-ghost" id="settingsCloseBtn" aria-label="Close settings" style="padding:6px 10px; font-size:18px; line-height:1;">&times;</button>
     </div>
-    <h1>Loop Booth</h1>
-    <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 20px;">Collaborate on dubs in real-time or practice solo.</p>
-    
-    <button class="btn btn-primary" id="singleplayerBtn" style="width: 100%; justify-content: center; margin-bottom: 20px;">Play Singleplayer</button>
 
-    <div style="display:flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-      <hr style="flex:1; border-color: var(--line-soft);">
-      <span style="font-size: 11px; color: var(--text-dim); font-weight: 600; letter-spacing: 1px;">OR MULTIPLAYER</span>
-      <hr style="flex:1; border-color: var(--line-soft);">
-    </div>
-    <p class="mp-hint">Multiplayer works in the browser. Share the room code after you create it.</p>
+    <div class="settings-body">
+      <!-- NORMAL SETTINGS (VISIBLE IMMEDIATELY) -->
+      
+      <!-- 1. Audio Auto-Normalization -->
+      <div class="settings-group">
+        <div class="settings-group-head">
+          <div class="settings-group-title">
+            <span>Audio Auto-Normalization</span>
+            <span class="settings-badge" id="normStatusBadge">Active</span>
+          </div>
+          <label class="toggle-switch" title="Toggle Auto-Normalization">
+            <input type="checkbox" id="settingAutoNorm" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.45;">
+          Automatically levels every take to a balanced loudness with soft-knee limiting, keeping all dubbers cohesive before preview and export.
+        </p>
 
-    <input type="text" id="playerNameInput" placeholder="Enter your name..." maxlength="20">
-    
-    <div class="setup-actions">
-      <button class="btn btn-primary" id="createRoomBtn">Create Room</button>
-      <div style="display:flex; gap: 5px; flex: 1;">
-        <input type="text" id="roomCodeInput" placeholder="Code" maxlength="5" style="width: 80px; text-transform: uppercase;">
-        <button class="btn" id="joinRoomBtn" style="flex:1;">Join</button>
+        <div class="settings-row">
+          <div class="settings-label">
+            <span class="settings-label-title">Target Output Loudness</span>
+            <span class="settings-label-desc">Standard studio volume level applied across all takes.</span>
+          </div>
+          <div class="settings-control">
+            <select id="settingTargetPeak" class="settings-select">
+              <option value="-0.5">-0.5 dBFS (Max punch)</option>
+              <option value="-1.0" selected>-1.0 dBFS (Studio default)</option>
+              <option value="-2.0">-2.0 dBFS (Safe headroom)</option>
+              <option value="-3.0">-3.0 dBFS (Broadcast norm)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Keyboard Key Shortcuts -->
+      <div class="settings-group">
+        <div class="settings-group-head">
+          <div class="settings-group-title">
+            <span>Keyboard Shortcuts</span>
+            <span class="settings-badge" id="shortcutsBadge">Enabled</span>
+          </div>
+          <label class="toggle-switch" title="Toggle Keyboard Key Shortcuts">
+            <input type="checkbox" id="settingShortcutsToggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-label">
+            <span class="settings-label-title">Show Shortcut Hints in UI</span>
+            <span class="settings-label-desc">Shows key tags ([R], [Space], [L]) on action buttons.</span>
+          </div>
+          <div class="settings-control">
+            <label class="toggle-switch">
+              <input type="checkbox" id="settingKeyHintsToggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Essential Keys Quick Strip -->
+        <div class="compact-keys-strip" id="compactKeysStrip">
+          <div class="compact-key-badge"><kbd class="kbd-chip">Space</kbd> Play / Pause</div>
+          <div class="compact-key-badge"><kbd class="kbd-chip">R</kbd> Record Take</div>
+          <div class="compact-key-badge"><kbd class="kbd-chip">L</kbd> Listen Original</div>
+          <div class="compact-key-badge"><kbd class="kbd-chip">P</kbd> Pause</div>
+          <div class="compact-key-badge"><kbd class="kbd-chip">&larr; / &rarr;</kbd> Prev / Next Line</div>
+        </div>
+      </div>
+
+      <!-- 3. Subtitles & Visuals -->
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="settings-label">
+            <span class="settings-label-title">Playing Fragment Subtitles</span>
+            <span class="settings-label-desc">Displays the active fragment's Voice-to-Text transcript as subtitles on the video monitor during playback and recording.</span>
+          </div>
+          <div class="settings-control">
+            <label class="toggle-switch" title="Toggle Subtitles on Playing Fragment">
+              <input type="checkbox" id="settingShowSubtitles" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-label">
+            <span class="settings-label-title">Asteroids Background</span>
+            <span class="settings-label-desc">Floating arcade vector wireframes in menu, lobby, and record screen.</span>
+          </div>
+          <div class="settings-control">
+            <select id="settingAsteroidsMode" class="settings-select">
+              <option value="glow" selected>Arcade Glow (Default)</option>
+              <option value="low">Low Motion / Dim</option>
+              <option value="off">Off (Solid Dark)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADVANCED SETTINGS COLLAPSIBLE TOGGLE -->
+      <div>
+        <button type="button" class="advanced-toggle-btn" id="advancedToggleBtn">
+          <span style="display:flex; align-items:center; gap:8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            <span>Advanced Settings & Audio DSP</span>
+          </span>
+          <span class="advanced-arrow" id="advancedArrow">&#x25BC;</span>
+        </button>
+
+        <!-- ADVANCED SETTINGS DRAWER (COLLAPSED BY DEFAULT) -->
+        <div class="advanced-settings-drawer" id="advancedSettingsDrawer">
+          <!-- Advanced Audio DSP -->
+          <div class="settings-group">
+            <div class="settings-group-title" style="margin-bottom:12px;">
+              <span>Audio Limiter & Noise Calibration</span>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-label">
+                <span class="settings-label-title">Silence & Noise Floor Gate</span>
+                <span class="settings-label-desc">Protects quiet background room noise from being boosted.</span>
+              </div>
+              <div class="settings-control">
+                <select id="settingSilenceFloor" class="settings-select">
+                  <option value="-50">-50 dBFS (Quiet room)</option>
+                  <option value="-42" selected>-42 dBFS (Balanced - Recommended)</option>
+                  <option value="-36">-36 dBFS (Noisy background)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-label">
+                <span class="settings-label-title">Re-level Existing Takes</span>
+                <span class="settings-label-desc">Applies current normalization profile to all takes in this session.</span>
+              </div>
+              <div class="settings-control">
+                <button type="button" class="btn btn-ghost" id="settingRenormalizeBtn" style="font-size:12px; padding:6px 12px; border:1px solid var(--line);">Re-level Takes</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Timing & Calibration -->
+          <div class="settings-group">
+            <div class="settings-group-title" style="margin-bottom:12px;">
+              <span>Input Latency & Navigation</span>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-label">
+                <span class="settings-label-title">Mic Latency Compensation</span>
+                <span class="settings-label-desc">Nudges recorded takes slightly to compensate for bluetooth or headphone lag.</span>
+              </div>
+              <div class="settings-control settings-range-wrap">
+                <input type="range" id="settingLatencyRange" min="-120" max="120" step="5" value="0">
+                <span class="settings-range-val" id="settingLatencyVal">0 ms</span>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-label">
+                <span class="settings-label-title">Auto-Advance Line</span>
+                <span class="settings-label-desc">Automatically selects the next line after finishing a recorded take.</span>
+              </div>
+              <div class="settings-control">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="settingAutoAdvance" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Complete Hotkeys Grid -->
+          <div class="settings-group">
+            <div class="settings-group-title" style="margin-bottom:6px;">
+              <span>Complete Keyboard Hotkeys Reference</span>
+            </div>
+            <div class="shortcuts-grid">
+              <div class="shortcut-card"><span class="shortcut-desc">Play / Review Takes</span><kbd class="kbd-chip">Space</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Record Take</span><kbd class="kbd-chip">R</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Listen Original</span><kbd class="kbd-chip">L</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Pause / Resume</span><kbd class="kbd-chip">P</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Previous Line</span><kbd class="kbd-chip">&larr; or [</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Next Line</span><kbd class="kbd-chip">&rarr; or ]</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Jump to Line 1–9</span><kbd class="kbd-chip">1 .. 9</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Undo Split / Merge</span><kbd class="kbd-chip">U</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Toggle Split Mode</span><kbd class="kbd-chip">E</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Open Settings</span><kbd class="kbd-chip">S or ?</kbd></div>
+              <div class="shortcut-card"><span class="shortcut-desc">Close / Stop</span><kbd class="kbd-chip">Esc</kbd></div>
+            </div>
+          </div>
+
+          <!-- Session & Multiplayer Status -->
+          <div class="settings-group">
+            <div class="settings-group-title" style="margin-bottom:6px;">
+              <span>Multiplayer Session Diagnostics</span>
+            </div>
+            <div class="session-diag-grid">
+              <div class="session-diag-item"><span class="diag-label">Room Code</span><span class="diag-val" id="diagRoomCode">LOCAL</span></div>
+              <div class="session-diag-item"><span class="diag-label">Session Role</span><span class="diag-val" id="diagRole">Solo</span></div>
+              <div class="session-diag-item"><span class="diag-label">Network Protocol</span><span class="diag-val" id="diagNetwork">WebSocket</span></div>
+              <div class="session-diag-item"><span class="diag-label">Dubbed Takes</span><span class="diag-val" id="diagTakesCount">0 recorded</span></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-    <div id="setupLoader" style="display:none; margin-top: 15px; font-size:13px; color: var(--accent);">Connecting to server...</div>
+
+    <div class="settings-footer">
+      <button class="btn btn-ghost" id="settingsResetBtn" style="font-size:12.5px;">Reset to Defaults</button>
+      <button class="btn btn-primary" id="settingsDoneBtn" style="padding:8px 18px;">Done</button>
+    </div>
+  </div>
+</div>
+
+<div id="setupScreen" class="screen active">
+  <span class="version-footer" aria-label="Application version">v1.2.0</span>
+  <div class="setup-bottom-actions">
+    <button class="btn btn-ghost btn-settings" id="settingsBtnSetup" title="Studio Settings (S)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      Settings
+    </button>
+    <button class="btn btn-ghost" id="savedDubsBtn" style="font-size: 13px;">Saved Dubs</button>
+  </div>
+  <div class="setup-card">
+    <div style="display:flex; justify-content:center; gap:8px; margin-bottom: 12px;">
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--p1-color);"></div>
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--p2-color);"></div>
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--p3-color);"></div>
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--p4-color);"></div>
+    </div>
+    <h1>Loop Booth</h1>
+    <p style="color: var(--text-dim); font-size: 13.5px; margin-bottom: 18px;">Collaborate on dubs in real-time or practice solo.</p>
+    
+    <div class="menu-mode-buttons">
+      <button class="btn btn-primary" id="singleplayerBtn" style="width: 100%; justify-content: center; padding: 12px 16px; font-size: 14.5px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        Play Singleplayer
+      </button>
+
+      <button class="btn" id="playMultiplayerBtn" style="width: 100%; justify-content: center; padding: 12px 16px; font-size: 14.5px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        Play Multiplayer
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="multiplayerScreen" class="screen">
+  <span class="version-footer" aria-label="Application version">v1.2.0</span>
+  <div style="position: absolute; top: 20px; left: 20px; z-index: 5;">
+    <button class="btn btn-ghost" id="mpBackBtn" style="font-size: 13px;">Back to Menu</button>
+  </div>
+  <div style="position: absolute; top: 20px; right: 20px; z-index: 5;">
+    <button class="btn btn-ghost btn-settings" id="settingsBtnMp" title="Studio Settings (S)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      Settings
+    </button>
+  </div>
+  <div class="setup-card mp-card">
+    <div style="display:flex; justify-content:center; gap:8px; margin-bottom: 12px;">
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--p1-color);"></div>
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--p2-color);"></div>
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--p3-color);"></div>
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--p4-color);"></div>
+    </div>
+    <h1>Multiplayer Studio</h1>
+    <p style="color: var(--text-dim); font-size: 13.5px; margin-bottom: 16px;">Host a new session or join your crew to record takes together.</p>
+
+    <div style="text-align: left; margin-bottom: 14px;">
+      <label for="playerNameInput" style="display:block; font-size: 11.5px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; margin-bottom: 6px;">Your Name</label>
+      <input type="text" id="playerNameInput" placeholder="Enter your name (anon if left blank)..." maxlength="20">
+    </div>
+
+    <div class="mp-options-grid">
+      <div class="mp-option-box">
+        <span class="mp-option-label">Host a Session</span>
+        <p class="mp-option-desc">Create a new room and share the invite link or code with your voice actors.</p>
+        <button class="btn btn-primary" id="createRoomBtn" style="width: 100%; justify-content: center;">Host Room</button>
+      </div>
+
+      <div class="mp-divider-row">
+        <hr style="flex:1; border-color: var(--line-soft);">
+        <span style="font-size: 10px; color: var(--text-dim); font-weight: 600; letter-spacing: 1px;">OR JOIN WITH CODE</span>
+        <hr style="flex:1; border-color: var(--line-soft);">
+      </div>
+
+      <div class="mp-option-box">
+        <span class="mp-option-label">Join a Session</span>
+        <div style="display:flex; gap: 8px; margin-top: 6px;">
+          <input type="text" id="roomCodeInput" placeholder="ROOM CODE" maxlength="5" style="text-transform: uppercase; font-family: var(--font-mono); font-size: 14px; letter-spacing: 2px; text-align: center;">
+          <button class="btn btn-primary" id="joinRoomBtn" style="min-width: 90px; justify-content: center;">Join</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="setupLoader" style="display:none; margin-top: 14px; font-size:12.5px; color: var(--accent);">Connecting to server...</div>
   </div>
 </div>
 
@@ -69,9 +348,21 @@
   <div style="position: absolute; top: 20px; left: 20px;">
     <button class="btn btn-ghost" id="lobbyBackBtn" style="font-size: 13px;">Back to Menu</button>
   </div>
+  <div style="position: absolute; top: 20px; right: 20px;">
+    <button class="btn btn-ghost btn-settings" id="settingsBtnLobby" title="Studio Settings (S)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      Settings
+    </button>
+  </div>
   <div class="lobby-card">
     <h2>Lobby Code</h2>
-    <div class="room-code" id="lobbyRoomCode">-----</div>
+    <div class="lobby-code-row">
+      <div class="room-code" id="lobbyRoomCode">-----</div>
+      <button class="btn btn-ghost copy-invite-btn" id="copyInviteBtn" title="Copy lobby invite link to share with friends" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px; height:15px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+        <span id="copyInviteText">Copy Invite Link</span>
+      </button>
+    </div>
     
     <div class="player-list" id="lobbyPlayerList">
       <!-- Players injected here -->
@@ -98,30 +389,89 @@
       <p style="font-size:14px; color: var(--text-dim);">You are the host. Select the video clip to dub.</p>
       <div class="dropzone" id="hostDropzone">Click or drop a video file here</div>
       <input type="file" id="hostFileInput" accept="video/*" class="sr-only">
+
+      <!-- Host Video Upload & Distribution Progress -->
+      <div id="hostUploadUI" style="display:none; margin-top: 14px;">
+        <div class="sync-card">
+          <div class="sync-card-header">
+            <div class="sync-icon-glow host-upload">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </div>
+            <div class="sync-text-details">
+              <div class="sync-filename-row">
+                <span class="sync-file-tag host">UPLOADING</span>
+                <strong id="hostUploadFileName" class="sync-filename">video.mp4</strong>
+              </div>
+              <span class="sync-status-msg" id="hostUploadStatusMsg">Uploading video clip to room...</span>
+            </div>
+          </div>
+          <div class="sync-bar-container">
+            <div class="sync-progress" role="progressbar" aria-label="Host video upload progress">
+              <div class="sync-progress-fill" id="hostUploadProgressFill"></div>
+              <div class="sync-progress-shimmer"></div>
+            </div>
+            <div class="sync-stats-row">
+              <span class="sync-badge-live"><span class="pulse-indicator host"></span> Active Upload</span>
+              <span class="sync-progress-text" id="hostUploadProgressText">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <button class="btn btn-primary" id="startStudioBtn" disabled="" style="width: 100%; margin-top: 15px; justify-content: center;">Start Studio</button>
     </div>
 
     <div id="lobbyGuestUI" style="display:none; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px;">
       <p id="guestWaitText" style="font-size:14px; color: var(--accent);">Waiting for host to select a video...</p>
       <div id="guestMatchUI" style="display:none;">
-        <p style="font-size:14px; color:var(--text-dim);"><strong id="reqFileName"></strong> Syncing up from the host. You can join as soon as it is ready.</p>
-        <div class="sync-progress" role="progressbar" aria-label="Video sync progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div class="sync-progress-fill" id="syncProgressFill"></div>
+        <div class="sync-card">
+          <div class="sync-card-header">
+            <div class="sync-icon-glow">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </div>
+            <div class="sync-text-details">
+              <div class="sync-filename-row">
+                <span class="sync-file-tag">HOST VIDEO</span>
+                <strong id="reqFileName" class="sync-filename">clip.mp4</strong>
+              </div>
+              <span class="sync-status-msg" id="guestSyncStatusMsg">Syncing video from host for high-fidelity dubbing...</span>
+            </div>
+          </div>
+          <div class="sync-bar-container">
+            <div class="sync-progress" role="progressbar" aria-label="Video sync progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="sync-progress-fill" id="syncProgressFill"></div>
+              <div class="sync-progress-shimmer"></div>
+            </div>
+            <div class="sync-stats-row">
+              <span class="sync-badge-live"><span class="pulse-indicator"></span> Live Transfer</span>
+              <span class="sync-progress-text" id="syncProgressText">0%</span>
+            </div>
+          </div>
         </div>
-        <div class="sync-progress-text" id="syncProgressText">0%</div>
       </div>
     </div>
   </div>
 </div>
 
-<div id="savedDubsScreen" class="screen" style="align-items: center; justify-content: center; padding: 20px;">
-  <div style="position: absolute; top: 20px; left: 20px;">
-    <button class="btn btn-ghost" id="savedDubsBackBtn" style="font-size: 13px;">Back to Menu</button>
+<div id="savedDubsScreen" class="screen">
+  <div class="saved-dubs-topbar">
+    <button class="btn btn-ghost" id="savedDubsBackBtn" style="font-size: 13px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      <span>Back to Menu</span>
+    </button>
+    <div class="saved-dubs-header-text">
+      <h2>Saved Dubs & Recent Sessions</h2>
+      <p>Re-enter your last active lobby or review exported dubs with full collaborator history.</p>
+    </div>
+    <button class="btn btn-ghost" id="clearSavedDubsBtn" style="font-size: 12px; color: var(--text-faint);" title="Clear saved history">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+      <span>Clear</span>
+    </button>
   </div>
-  <div class="setup-card" style="max-width: 500px; width: 100%;">
-    <h2 style="font-size: 20px; margin-bottom: 20px;">Saved Dubs</h2>
-    <div id="savedDubsList" style="text-align: center; background: var(--bg-well); border: 1px solid var(--line); border-radius: var(--radius-small); padding: 40px 20px; color: var(--text-faint); font-size: 14px;">
-      You haven't saved any final dubs yet.
+
+  <div class="saved-dubs-scroll-container">
+    <div id="savedDubsList" class="saved-dubs-grid">
+      <!-- Injected dynamically via app.js -->
     </div>
   </div>
 </div>
@@ -131,6 +481,7 @@
     <div class="topbar-left">
       <button class="btn btn-ghost" id="studioBackBtn" style="padding: 6px 10px; font-size: 12px;">Menu</button>
       <span class="room-badge" id="studioRoomBadge">Room: ---</span>
+      <span class="room-badge norm-indicator" id="studioNormBadge" title="Automatic audio take level normalization">Norm: -1.0 dBFS</span>
       <span class="room-badge score-mode-indicator" id="studioScoreModeBadge" style="display:none; color:#FBBF24; border-color:rgba(245,158,11,0.4); background:rgba(245,158,11,0.08);">★ Scoring Mode</span>
       <div class="studio-player-list" id="studioPlayerList"></div>
     </div>
@@ -139,23 +490,76 @@
         <label for="mixSlider">Background:</label>
         <input type="range" id="mixSlider" min="0" max="100" value="65">
       </div>
+      <button class="btn btn-ghost btn-settings" id="settingsBtnStudio" title="Studio Settings & Shortcuts (S)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>Settings</span>
+      </button>
     </div>
   </div>
 
   <div class="workspace">
     <div class="stage">
-      <div class="monitor">
+      <div class="monitor" id="studioMonitor">
         <video id="mainVideo" playsinline webkit-playsinline preload="auto"></video>
         <div class="monitor-badge" id="monitorBadge"><div class="rec-dot"></div><span id="monitorBadgeText">idle</span></div>
-        <div class="monitor-loading" id="monitorLoading" style="display:none;"><div class="monitor-spinner"></div><span id="monitorLoadingText">Loading video...</span></div>
+
+        <!-- Real-Time Take Recording HUD Timer -->
+        <div class="monitor-rec-timer" id="monitorRecTimer" style="display:none;" aria-live="polite">
+          <div class="rec-glow-dot"></div>
+          <span class="rec-status-tag">REC</span>
+          <span class="rec-timer-digits" id="monitorRecTime">0:00.0</span>
+          <span class="rec-timer-target" id="monitorRecTarget">/ 0:00.0</span>
+        </div>
+
+        <!-- Monitor Recording Bottom Progress Line -->
+        <div class="monitor-rec-bar" id="monitorRecBar" style="display:none;">
+          <div class="monitor-rec-bar-fill" id="monitorRecBarFill"></div>
+        </div>
+
+        <!-- Playing Fragment Subtitle Overlay -->
+        <div class="monitor-subtitle-overlay" id="monitorSubtitleOverlay" style="display:none;" aria-live="polite">
+          <span class="monitor-subtitle-text" id="monitorSubtitleText"></span>
+        </div>
+
+        <!-- Modern Media Syncing & Loading Overlay -->
+        <div class="monitor-loading" id="monitorLoading" style="display:none;">
+          <div class="monitor-loading-card">
+            <div class="monitor-loading-ring">
+              <div class="monitor-spinner"></div>
+              <svg class="monitor-loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+            </div>
+            <div class="monitor-loading-info">
+              <span class="monitor-loading-title" id="monitorLoadingText">Loading video...</span>
+              <span class="monitor-loading-sub" id="monitorLoadingSub">Preparing audio waveforms & preview</span>
+            </div>
+            <div class="monitor-loading-progress-wrap">
+              <div class="monitor-progress-bar">
+                <div class="monitor-progress-fill" id="monitorLoadingBarFill" style="width: 0%;"></div>
+                <div class="monitor-progress-shimmer"></div>
+              </div>
+              <span class="monitor-progress-percent" id="monitorLoadingPercent">0%</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="lane-panel">
         <div class="lane-head">
-          <div class="lane-title">Line <span id="fragLabel">1</span> of <span id="fragTotal">1</span></div>
+          <div class="lane-title-group">
+            <div class="lane-title">Line <span id="fragLabel">1</span> of <span id="fragTotal">1</span></div>
+            <div class="lane-time-readout" id="laneTimeReadout">
+              <span class="lane-time-curr" id="laneCurrTime">0:00.0</span>
+              <span class="lane-time-sep">/</span>
+              <span class="lane-time-total" id="laneTotalTime">0:00.0</span>
+            </div>
+          </div>
           <div class="lane-score-badge" id="laneScoreBadge" style="display:none;"></div>
         </div>
-        <canvas id="waveCanvas"></canvas>
+
+        <div class="wave-canvas-wrapper" id="waveCanvasWrapper" title="Click anywhere to scrub playhead">
+          <canvas id="waveCanvas"></canvas>
+          <div class="wave-ruler-labels" id="waveRulerLabels"></div>
+        </div>
         
         <div class="assign-panel" id="assignPanel">
           <span class="assign-label">Assigned Players:</span>
@@ -166,24 +570,26 @@
       </div>
 
       <div class="transport">
-        <button class="btn" id="listenBtn">Listen Original</button>
-        <button class="btn btn-primary btn-rec" id="recordBtn" disabled="">Record Take</button>
-        <button class="btn" id="reviewBtn" disabled="">Play Takes</button>
-        <button class="btn" id="pauseBtn" disabled="">Pause</button>
+        <button class="btn" id="listenBtn">Listen Original <span class="key-hint">L</span></button>
+        <button class="btn btn-primary btn-rec" id="recordBtn" disabled="">Record Take <span class="key-hint">R</span></button>
+        <button class="btn" id="reviewBtn" disabled="">Play Takes <span class="key-hint">Space</span></button>
+        <button class="btn" id="pauseBtn" disabled="">Pause <span class="key-hint">P</span></button>
         <div class="transport-spacer"></div>
         <div style="display:flex; align-items:center; gap:6px;">
-          <button class="btn btn-icon" id="prevFragBtn" aria-label="Previous line">&lt;</button>
-          <button class="btn btn-icon" id="nextFragBtn" aria-label="Next line">&gt;</button>
+          <button class="btn btn-icon" id="prevFragBtn" aria-label="Previous line" title="Previous Line ([)">&lt;</button>
+          <button class="btn btn-icon" id="nextFragBtn" aria-label="Next line" title="Next Line (])">&gt;</button>
         </div>
       </div>
     </div>
 
     <div class="sidebar">
       <div class="sidebar-head">
-        <h2>Lines</h2>
+        <div class="sidebar-title-row">
+          <h2>Lines</h2>
+        </div>
         <div class="sidebar-actions">
-          <button class="btn btn-ghost undo-btn" id="undoBtn" disabled="" title="Undo last split or merge">Undo</button>
-          <label class="edit-toggle" id="editToggle" title="Host only: click master timeline to split">
+          <button class="btn btn-ghost undo-btn" id="undoBtn" disabled="" title="Undo last split or merge (U)">Undo <span class="key-hint">U</span></button>
+          <label class="edit-toggle" id="editToggle" title="Host only: click master timeline to split (E)">
             <input type="checkbox" id="editToggleInput"> edit splits (Host)
           </label>
         </div>
@@ -193,14 +599,81 @@
   </div>
 
   <div class="master-panel">
-    <div style="font-size:12px; color: var(--text-dim);">Master Timeline</div>
-    <canvas id="masterCanvas"></canvas>
+    <div class="master-head">
+      <div class="master-left-group">
+        <div class="master-title-row">
+          <span class="master-title">Master Timeline</span>
+          <span class="master-badge" id="masterLineCount">1 Line</span>
+          <span class="master-duration-readout" id="masterFragmentsTotalDuration" title="Sum of all fragment durations added to the timeline">
+            <span class="master-duration-label">Total Duration</span>
+            <span class="master-duration-val" id="masterFragmentsTotalDurationVal">00:00.0</span>
+          </span>
+        </div>
+
+        <!-- Voice-to-Text & Current Fragment Transcript (Above master timeline on its left) -->
+        <div class="master-transcript-bar" id="masterTranscriptBar">
+          <button class="btn btn-ghost voice-to-text-btn" id="voiceToTextBtn" title="Transcribe current line with AI Voice-to-Text">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>
+            <span id="voiceToTextBtnText">Voice-to-Text</span>
+          </button>
+          <div class="master-transcript-box">
+            <span class="master-transcript-line-badge" id="masterTranscriptLineBadge">Line 1:</span>
+            <div class="master-transcript-text" id="activeLineTranscriptText" contenteditable="true" spellcheck="false" title="Click to edit transcript for current line">Click Voice-to-Text or type script here...</div>
+          </div>
+          <div class="transcribe-status-pill" id="transcribeStatusPill" style="display:none;">
+            <span class="pulse-indicator"></span>
+            <span id="transcribeStatusText">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="master-actions-group">
+        <div class="dropdown-wrap" id="exportTranscriptDropdownWrap">
+          <button class="btn btn-ghost btn-export-script" id="exportTranscriptBtn" type="button" title="Export full master timeline transcript (.txt or .srt)">
+            <span class="export-btn-progress" id="exportTranscriptProgressFill"></span>
+            <span class="export-btn-spinner" id="exportTranscriptSpinner" style="display:none;" aria-hidden="true"></span>
+            <svg id="exportTranscriptIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span id="exportTranscriptBtnText">Export Script</span>
+            <svg id="exportTranscriptChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;margin-left:2px;opacity:0.7;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <div class="dropdown-menu export-dropdown-menu" id="exportTranscriptMenu" style="display:none;">
+            <button class="dropdown-item" id="exportTranscriptTxtBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:var(--accent);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+              <div>
+                <span class="item-title">Text File (.txt)</span>
+                <span class="item-desc">Dialogue script with timestamps & speakers</span>
+              </div>
+            </button>
+            <button class="dropdown-item" id="exportTranscriptSrtBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:#3DDC97;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
+              <div>
+                <span class="item-title">Subtitles (.srt)</span>
+                <span class="item-desc">Standard SubRip format for media players</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div class="master-time-info">
+          <span class="master-time-curr" id="masterCurrTime">00:00.0</span>
+          <span class="master-time-sep">/</span>
+          <span class="master-time-total" id="masterTotalTime">00:00.0</span>
+          <span class="master-hint">(Click track to jump or split)</span>
+        </div>
+      </div>
+    </div>
+    <div class="master-canvas-wrapper" id="masterCanvasWrapper" title="Click master timeline to jump or split line">
+      <canvas id="masterCanvas"></canvas>
+    </div>
   </div>
 
   <div class="render-bar">
     <div style="flex:1;"></div>
     <span id="renderStatus" style="font-size:13px; color: var(--text-dim);"></span>
-    <div class="render-progress" id="renderProgress"><div class="render-progress-fill" id="renderProgressFill"></div></div>
+    <div class="render-progress" id="renderProgress">
+      <div class="render-progress-fill" id="renderProgressFill"></div>
+      <div class="render-progress-shimmer"></div>
+    </div>
     <a class="download-link" id="downloadLink" download="loop-booth-mp-dub.webm">Download Final</a>
     <button class="btn btn-primary" id="renderBtn">Print Final Dub</button>
   </div>

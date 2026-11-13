@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -10,6 +11,41 @@ const rooms = new Map();
 const takes = new Map();
 const roomVideos = new Map();
 const subscriptions = new Map();
+
+let aiClient = null;
+function getAiClient() {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!apiKey) return null;
+  if (!aiClient) {
+    try {
+      aiClient = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+    } catch (err) {
+      console.warn('Failed to initialize GoogleGenAI client:', err);
+      return null;
+    }
+  }
+  return aiClient;
+}
+
+async function mapConcurrent(items, limit, fn) {
+  const results = new Array(items.length);
+  let index = 0;
+  const workers = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    while (index < items.length) {
+      const currentIdx = index++;
+      results[currentIdx] = await fn(items[currentIdx], currentIdx);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -150,6 +186,275 @@ const httpServer = createServer(async (request, response) => {
     return;
   }
 
+  if (requestUrl.pathname === '/api/health' || requestUrl.pathname === '/healthz') {
+    response.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store'
+    });
+    response.end(JSON.stringify({
+      status: 'ok',
+      service: 'loop-booth',
+      uptime: Math.floor(process.uptime()),
+      activeRooms: rooms.size,
+      connectedClients: subscriptions.size,
+      timestamp: new Date().toISOString()
+    }));
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/transcribe' && request.method === 'POST') {
+    const ai = getAiClient();
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of request) {
+      size += chunk.length;
+      if (size > 50 * 1024 * 1024) {
+        response.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' });
+        response.end(JSON.stringify({ error: 'Audio payload too large.' }));
+        request.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+    } catch {
+      response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({ error: 'Invalid JSON body.' }));
+      return;
+    }
+
+    if (!ai) {
+      if (Array.isArray(payload.items)) {
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        response.end(JSON.stringify({
+          results: payload.items.map(it => ({ id: it?.id, transcript: '' })),
+          keyMissing: true,
+          warning: 'Gemini API key is not configured in environment. Scripts can be entered directly.'
+        }));
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({
+        transcript: '',
+        keyMissing: true,
+        warning: 'Gemini API key is not configured in environment. Scripts can be entered directly.'
+      }));
+      return;
+    }
+
+    function parseRateLimitError(err) {
+      const msg = String(err?.message || err || '');
+      const isRateLimit = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota');
+      if (!isRateLimit) return null;
+      let retryAfterSec = 30;
+      const match = msg.match(/retry(?:Delay["']?\s*:\s*["']?| in )(\d+(?:\.\d+)?)s/i);
+      if (match) {
+        retryAfterSec = Math.max(5, Math.ceil(Number(match[1])));
+      }
+      return {
+        rateLimited: true,
+        retryAfterSec,
+        warning: `Voice-to-Text API rate limit reached. Please wait ${retryAfterSec}s before retrying.`
+      };
+    }
+
+    function extractJsonArray(rawText) {
+      if (!rawText || typeof rawText !== 'string') return null;
+      const trimmed = rawText.trim();
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed : null;
+      } catch {}
+      const match = trimmed.match(/\[[\s\S]*\]/);
+      if (match) {
+        try {
+          const parsed = JSON.parse(match[0]);
+          return Array.isArray(parsed) ? parsed : null;
+        } catch {}
+      }
+      return null;
+    }
+
+    async function transcribeSingleAudio(audioBase64, mimeType = 'audio/wav') {
+      const audioPart = {
+        inlineData: {
+          mimeType,
+          data: audioBase64
+        }
+      };
+      const contents = {
+        parts: [
+          audioPart,
+          { text: 'Transcribe the spoken words in this audio clip verbatim as plain text. Output only the spoken dialogue. If there is no audible speech, silent pause, or only music/effects, output an empty string.' }
+        ]
+      };
+      try {
+        const res = await ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents,
+          config: { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }
+        });
+        return (res.text || '').trim();
+      } catch (err) {
+        const msg = String(err?.message || '');
+        if (msg.includes('thinking') || msg.includes('INVALID_ARGUMENT')) {
+          const fallbackRes = await ai.models.generateContent({
+            model: 'gemini-4-hydrogen',
+            contents
+          });
+          return (fallbackRes.text || '').trim();
+        }
+        throw err;
+      }
+    }
+
+    async function transcribeBatchItems(items) {
+      const resultsMap = new Map();
+      const validItems = [];
+      for (const item of items) {
+        if (!item || !item.id) continue;
+        resultsMap.set(item.id, '');
+        if (item.audio && typeof item.audio === 'string' && item.audio.length > 0) {
+          validItems.push(item);
+        }
+      }
+
+      if (validItems.length === 0) {
+        return items.map(it => ({ id: it?.id, transcript: '' }));
+      }
+
+      if (validItems.length === 1) {
+        const text = await transcribeSingleAudio(validItems[0].audio, validItems[0].mimeType || 'audio/wav');
+        resultsMap.set(validItems[0].id, text);
+        return items.map(it => ({ id: it?.id, transcript: resultsMap.get(it?.id) || '' }));
+      }
+
+      const parts = [
+        {
+          text:
+            `Transcribe the spoken dialogue in each audio segment below. ` +
+            `Respond ONLY with a JSON array of objects, one for each Segment ID in order: ` +
+            `[{"id":"<Segment ID>","transcript":"<verbatim spoken dialogue or empty string if silent/music only>"}]. ` +
+            `Do not include markdown code fences or extra commentary.`
+        }
+      ];
+      for (const item of validItems) {
+        parts.push({ text: `Segment ID: ${item.id}` });
+        parts.push({
+          inlineData: {
+            mimeType: item.mimeType || 'audio/wav',
+            data: item.audio
+          }
+        });
+      }
+
+      let rawText = '';
+      try {
+        const res = await ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: { parts },
+          config: {
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  transcript: { type: Type.STRING }
+                },
+                required: ['id', 'transcript']
+              }
+            }
+          }
+        });
+        rawText = res.text || '';
+      } catch (err) {
+        const msg = String(err?.message || '');
+        if (msg.includes('400') || msg.includes('INVALID_ARGUMENT') || msg.includes('responseSchema') || msg.includes('thinking')) {
+          const plainRes = await ai.models.generateContent({
+            model: 'gemini-4-hydrogen',
+            contents: { parts }
+          });
+          rawText = plainRes.text || '';
+        } else {
+          throw err;
+        }
+      }
+
+      const parsed = extractJsonArray(rawText);
+      if (parsed) {
+        for (const entry of parsed) {
+          if (entry && entry.id && resultsMap.has(entry.id)) {
+            resultsMap.set(entry.id, typeof entry.transcript === 'string' ? entry.transcript.trim() : '');
+          }
+        }
+      }
+
+      return items.map(it => ({ id: it?.id, transcript: resultsMap.get(it?.id) || '' }));
+    }
+
+    try {
+      if (Array.isArray(payload.items)) {
+        try {
+          const results = await transcribeBatchItems(payload.items);
+          response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          response.end(JSON.stringify({ results }));
+          return;
+        } catch (batchErr) {
+          const rateInfo = parseRateLimitError(batchErr);
+          if (rateInfo) {
+            console.warn(`Voice-to-Text rate limit hit (retry in ${rateInfo.retryAfterSec}s).`);
+            response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            response.end(JSON.stringify({
+              results: payload.items.map(it => ({ id: it?.id, transcript: '' })),
+              ...rateInfo
+            }));
+            return;
+          }
+          throw batchErr;
+        }
+      }
+
+      if (!payload.audio) {
+        response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        response.end(JSON.stringify({ error: 'Missing audio data in request.' }));
+        return;
+      }
+
+      try {
+        const text = await transcribeSingleAudio(payload.audio, payload.mimeType || 'audio/wav');
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        response.end(JSON.stringify({ transcript: text }));
+        return;
+      } catch (singleErr) {
+        const rateInfo = parseRateLimitError(singleErr);
+        if (rateInfo) {
+          console.warn(`Voice-to-Text rate limit hit (retry in ${rateInfo.retryAfterSec}s).`);
+          response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          response.end(JSON.stringify({
+            transcript: '',
+            ...rateInfo
+          }));
+          return;
+        }
+        throw singleErr;
+      }
+    } catch (err) {
+      console.error('Transcription endpoint failure:', err?.message || err);
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({
+        transcript: '',
+        error: err?.message || 'Failed to generate transcript from speech.'
+      }));
+      return;
+    }
+  }
+
   const requested = requestUrl.pathname === '/' ? '/index.html' : requestUrl.pathname;
   const safePath = normalize(requested).replace(/^([.][.][/\\])+/, '');
   const filePath = join(root, safePath);
@@ -157,7 +462,10 @@ const httpServer = createServer(async (request, response) => {
     const body = await readFile(filePath);
     const ext = extname(filePath).toLowerCase();
     const type = MIME_TYPES[ext] || 'application/octet-stream';
-    response.writeHead(200, { 'Content-Type': type });
+    response.writeHead(200, {
+      'Content-Type': type,
+      'Accept-Ranges': 'bytes'
+    });
     response.end(body);
   } catch {
     response.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -232,12 +540,31 @@ wss.on('connection', socket => {
   socket.on('close', () => subscriptions.delete(socket));
 });
 
+const host = process.env.HOST || '0.0.0.0';
+
 httpServer.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.warn(`Port ${port} is already in use. Loop Booth dev server is active at http://0.0.0.0:${port}`);
+    console.warn(`Port ${port} is already in use. Loop Booth dev server is active at http://${host}:${port}`);
   } else {
     console.error('Server error:', err);
   }
 });
 
-httpServer.listen(port, '0.0.0.0', () => console.log(`Loop Booth running at http://0.0.0.0:${port}`));
+httpServer.listen(port, host, () => {
+  console.log(`Loop Booth server running at http://${host}:${port}`);
+});
+
+function gracefulShutdown(signal) {
+  console.log(`Received ${signal}. Shutting down gracefully...`);
+  wss.close(() => {
+    httpServer.close(() => {
+      console.log('Server terminated cleanly.');
+      process.exit(0);
+    });
+  });
+  // Force exit after 3 seconds if connections linger
+  setTimeout(() => process.exit(0), 3000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

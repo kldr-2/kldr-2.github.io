@@ -129,12 +129,49 @@ function asteroidFrame() {
   asteroidAnimId = requestAnimationFrame(asteroidFrame);
 }
 
+let currentMode = 'glow';
+let hideTimeoutId = null;
+
+export function setAsteroidsMode(mode) {
+  currentMode = mode || 'glow';
+  if (currentMode === 'off') {
+    stopAsteroids();
+    if (bgCanvas) bgCanvas.style.display = 'none';
+  } else {
+    if (bgCanvas) {
+      bgCanvas.style.display = 'block';
+      bgCanvas.style.opacity = currentMode === 'low' ? '0.5' : '1';
+    }
+    if (typeof document !== 'undefined') {
+      const activeScreen = document.querySelector('.screen.active');
+      if (activeScreen) {
+        startAsteroids();
+      }
+    }
+  }
+}
+
 export function startAsteroids() {
-  if (!bgCanvas || !bgCtx || asteroidAnimId) return;
+  if (currentMode === 'off') {
+    if (bgCanvas) bgCanvas.style.display = 'none';
+    return;
+  }
+  if (!bgCanvas || !bgCtx) return;
+
+  if (hideTimeoutId) {
+    clearTimeout(hideTimeoutId);
+    hideTimeoutId = null;
+  }
+
   isStarted = true;
   bgCanvas.style.display = 'block';
-  bgCanvas.style.opacity = '1';
-  asteroidFrame();
+  bgCanvas.style.opacity = currentMode === 'low' ? '0.5' : '1';
+  accentRgb = getAccentRgb();
+  resizeBgCanvas();
+
+  if (!asteroidAnimId) {
+    asteroidFrame();
+  }
 }
 
 export function stopAsteroids() {
@@ -143,27 +180,32 @@ export function stopAsteroids() {
     cancelAnimationFrame(asteroidAnimId);
     asteroidAnimId = null;
   }
+  if (hideTimeoutId) {
+    clearTimeout(hideTimeoutId);
+    hideTimeoutId = null;
+  }
   if (bgCanvas) {
     bgCanvas.style.opacity = '0';
     // Hide display after fade to guarantee 0 paint cost in studio
-    setTimeout(() => {
+    hideTimeoutId = setTimeout(() => {
       if (!isStarted && bgCanvas) {
         bgCanvas.style.display = 'none';
       }
+      hideTimeoutId = null;
     }, 400);
   }
 }
 
 export function initAsteroidsBackground(canvasId = 'bgAsteroids') {
   if (typeof document === 'undefined' || typeof window === 'undefined') {
-    return { start: startAsteroids, stop: stopAsteroids };
+    return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode };
   }
 
   bgCanvas = document.getElementById(canvasId);
-  if (!bgCanvas) return { start: startAsteroids, stop: stopAsteroids };
+  if (!bgCanvas) return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode };
 
   bgCtx = bgCanvas.getContext('2d');
-  if (!bgCtx) return { start: startAsteroids, stop: stopAsteroids };
+  if (!bgCtx) return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode };
 
   accentRgb = getAccentRgb();
   resizeBgCanvas();
@@ -187,6 +229,7 @@ export function initAsteroidsBackground(canvasId = 'bgAsteroids') {
 
   return {
     start: startAsteroids,
-    stop: stopAsteroids
+    stop: stopAsteroids,
+    setMode: setAsteroidsMode
   };
 }
