@@ -251,6 +251,9 @@ export function createMultiplayerClient() {
       await ensureConnected();
       rawSend({ op: 'room-event', roomId, event });
     },
+    async partyAction(roomId, payload) {
+      return request('party-action', roomId, payload);
+    },
     onRoomEvent(roomId, callback) {
       if (!roomEventListeners.has(roomId)) {
         roomEventListeners.set(roomId, new Set());

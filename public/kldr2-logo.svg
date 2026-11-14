@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 388" fill="none" role="img" aria-label="KLDR2 Logo">
+  <defs>
+    <filter id="kldrRimGlow" x="-16%" y="-16%" width="132%" height="132%">
+      <feGaussianBlur stdDeviation="5.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowK" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#B042FF" flood-opacity="0.88"/>
+    </filter>
+    <filter id="glowL" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#1CE39A" flood-opacity="0.88"/>
+    </filter>
+    <filter id="glowD" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#FA9819" flood-opacity="0.88"/>
+    </filter>
+    <filter id="glowR" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#14AAFF" flood-opacity="0.88"/>
+    </filter>
+    <filter id="glow2" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6.5" flood-color="#FFF7E8" flood-opacity="0.65"/>
+    </filter>
+    <linearGradient id="bgCard" x1="20" y1="18" x2="430" y2="368" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#241D1B"/>
+      <stop offset="55%" stop-color="#1A1412"/>
+      <stop offset="100%" stop-color="#130E0D"/>
+    </linearGradient>
+    <linearGradient id="rimGrad" x1="16" y1="18" x2="440" y2="368" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9A5CFF"/>
+      <stop offset="50%" stop-color="#7642C8"/>
+      <stop offset="100%" stop-color="#8C4FE8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 2-stepped obsidian silhouette matching the reference shape -->
+  <path
+    d="M 88 20
+       H 226
+       A 48 48 0 0 1 274 68
+       V 74
+       A 14 14 0 0 0 288 88
+       H 314
+       A 44 44 0 0 1 358 132
+       V 164
+       A 14 14 0 0 0 372 178
+       H 392
+       A 48 48 0 0 1 440 226
+       V 300
+       A 68 68 0 0 1 372 368
+       H 88
+       A 68 68 0 0 1 20 300
+       V 88
+       A 68 68 0 0 1 88 20
+       Z"
+    fill="url(#bgCard)"
+    stroke="url(#rimGrad)"
+    stroke-width="4.5"
+    filter="url(#kldrRimGlow)"
+  />
+
+  <!-- Top Row: K (Purple) -->
+  <path
+    d="M 64 56 H 93 V 104 L 132 56 H 166 L 120 111 L 168 174 H 133 L 93 122 V 174 H 64 V 56 Z"
+    fill="#A535FF"
+    stroke="#E4A8FF"
+    stroke-width="2.6"
+    stroke-linejoin="round"
+    filter="url(#glowK)"
+  />
+
+  <!-- Top Row: L (Mint Green) -->
+  <path
+    d="M 182 56 H 212 V 147 H 267 V 174 H 182 V 56 Z"
+    fill="#18DE97"
+    stroke="#8CFCD5"
+    stroke-width="2.6"
+    stroke-linejoin="round"
+    filter="url(#glowL)"
+  />
+
+  <!-- Bottom Row: D (Amber Orange) -->
+  <path
+    fill-rule="evenodd"
+    d="M 64 205 H 114 C 151 205 173 227 173 264 C 173 301 151 323 114 323 H 64 V 205 Z M 94 231 V 297 H 112 C 132 297 143 285 143 264 C 143 243 132 231 112 231 H 94 Z"
+    fill="#F59316"
+    stroke="#FFD07D"
+    stroke-width="2.6"
+    stroke-linejoin="round"
+    filter="url(#glowD)"
+  />
+
+  <!-- Bottom Row: R (Electric Cyan-Blue) -->
+  <path
+    fill-rule="evenodd"
+    d="M 182 205 H 239 C 267 205 284 220 284 243 C 284 260 274 273 257 278 L 287 323 H 253 L 227 283 H 212 V 323 H 182 V 205 Z M 212 229 V 258 H 236 C 248 258 255 253 255 243.5 C 255 234 248 229 236 229 H 212 Z"
+    fill="#129FF7"
+    stroke="#80D7FF"
+    stroke-width="2.6"
+    stroke-linejoin="round"
+    filter="url(#glowR)"
+  />
+
+  <!-- Bottom Row: 2 (Warm Cream White) -->
+  <path
+    d="M 299 246 C 299 221 319 203 348 203 C 377 203 396 218 396 241 C 396 260 383 272 355 287 L 338 297 H 398 V 323 H 297 V 302 L 336 277 C 358 263 365 254 365 243.5 C 365 234 358 228 347 228 C 334 228 327 236 326 248 L 299 246 Z"
+    fill="#F3EFE7"
+    stroke="#FFFFFF"
+    stroke-width="1.6"
+    stroke-linejoin="round"
+    filter="url(#glow2)"
+  />
+</svg>

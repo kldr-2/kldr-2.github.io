@@ -118,6 +118,355 @@ function updatePath(path, data) {
   return null;
 }
 
+function createInitialPartyState(fragmentIndex = 0, roundSerial = 1) {
+  return {
+    enabled: true,
+    phase: 'recording', // 'recording' | 'voting' | 'revote' | 'winner' | 'finale'
+    fragmentIndex,
+    roundSerial,
+    submittedUids: [],
+    candidates: [],
+    votes: {},
+    initialTally: null,
+    revoteRound: 0,
+    tiedVotesCount: 0,
+    lastWinner: null,
+    winners: {},
+    readyUids: [],
+    spotlightUid: null,
+    finalePlayback: {
+      playing: false,
+      startedAt: 0,
+      position: 0,
+      seq: 1
+    },
+    statusBanner: `Line ${fragmentIndex + 1} · Everyone dub this line!`
+  };
+}
+
+function getEligibleVoters(room, candidates) {
+  const players = Array.isArray(room.players) ? room.players : [];
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  if (candidates.length === 1) {
+    // Only players who did NOT record this lone take can vote on it
+    return players.filter(p => p && p.id && p.id !== candidates[0]).map(p => p.id);
+  }
+  // When 2+ candidates exist, every player can vote for at least one other candidate
+  return players.filter(p => p && p.id).map(p => p.id);
+}
+
+function clearFragmentTakes(roomId, fragId) {
+  const roomTakes = takes.get(roomId);
+  if (!roomTakes || !fragId) return false;
+  let removed = false;
+  for (const [key, val] of roomTakes.entries()) {
+    if (val && val.fragId === fragId) {
+      roomTakes.delete(key);
+      removed = true;
+    }
+  }
+  if (removed) {
+    broadcast(`artifacts/loop-booth-mp/public/data/takes_${roomId}`, [...roomTakes.values()]);
+  }
+  return removed;
+}
+
+function getRoomTakesForFragment(roomId, fragId) {
+  const roomTakes = takes.get(roomId);
+  if (!roomTakes || !fragId) return [];
+  const uids = [];
+  for (const val of roomTakes.values()) {
+    if (val && val.fragId === fragId && val.uid && !uids.includes(val.uid)) {
+      uids.push(val.uid);
+    }
+  }
+  return uids;
+}
+
+function resolvePartyVotes(room) {
+  const party = room.party;
+  if (!party) return room;
+  const fragments = Array.isArray(room.fragments) ? room.fragments : [];
+  const frag = fragments[party.fragmentIndex] || { id: `frag_${party.fragmentIndex}` };
+  const candidates = Array.isArray(party.candidates) ? party.candidates : [];
+  if (candidates.length === 0) return room;
+
+  const counts = {};
+  candidates.forEach(uid => { counts[uid] = 0; });
+  Object.values(party.votes || {}).forEach((votedUid) => {
+    if (Object.prototype.hasOwnProperty.call(counts, votedUid)) {
+      counts[votedUid] += 1;
+    }
+  });
+
+  let maxVotes = -1;
+  candidates.forEach((uid) => {
+    if (counts[uid] > maxVotes) maxVotes = counts[uid];
+  });
+
+  const topCandidates = candidates.filter(uid => counts[uid] === maxVotes);
+
+  // Tie on initial vote -> 1 re-vote between only the highest-voted candidates
+  if (topCandidates.length > 1 && (party.revoteRound || 0) === 0) {
+    party.phase = 'revote';
+    party.revoteRound = 1;
+    party.tiedVotesCount = maxVotes;
+    party.initialTally = { ...counts };
+    party.candidates = topCandidates;
+    party.votes = {};
+    party.spotlightUid = topCandidates[0] || null;
+    party.statusBanner = `TIE at ${maxVotes} vote${maxVotes === 1 ? '' : 's'}! 1 Re-Vote between top ${topCandidates.length} takes!`;
+    return room;
+  }
+
+  // Decide winner (either clear winner OR tie on re-vote -> random pick!)
+  let winnerUid = topCandidates[0];
+  let winReason = (party.revoteRound || 0) >= 1 ? 'revote' : 'votes';
+  if (topCandidates.length > 1) {
+    winnerUid = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+    winReason = 'random_tiebreak';
+  }
+
+  const players = Array.isArray(room.players) ? room.players : [];
+  const winnerPlayer = players.find(p => p && p.id === winnerUid) || {};
+  const winnerInfo = {
+    fragId: frag.id,
+    fragIndex: party.fragmentIndex,
+    uid: winnerUid,
+    playerName: winnerPlayer.name || 'Player',
+    playerColor: winnerPlayer.color || '#B285F5',
+    votes: counts[winnerUid] || 0,
+    tally: counts,
+    initialTally: party.initialTally ? { ...party.initialTally } : null,
+    winReason,
+    decidedAt: Date.now()
+  };
+
+  if (!party.winners || typeof party.winners !== 'object') {
+    party.winners = {};
+  }
+  party.winners[frag.id] = winnerInfo;
+  party.lastWinner = winnerInfo;
+  party.readyUids = [];
+  party.phase = 'winner';
+  party.statusBanner = winReason === 'random_tiebreak'
+    ? `Double tie! Random tie-breaker crowned ${winnerInfo.playerName} on Line ${party.fragmentIndex + 1}!`
+    : `${winnerInfo.playerName} wins Line ${party.fragmentIndex + 1}!`;
+  return room;
+}
+
+function broadcastRoomEvent(roomId, event) {
+  const normalizedRoomId = String(roomId || '').toUpperCase();
+  for (const [s, paths] of subscriptions) {
+    let matches = false;
+    for (const p of paths) {
+      if (p.toUpperCase().includes(normalizedRoomId)) {
+        matches = true;
+        break;
+      }
+    }
+    if (matches) send(s, { type: 'room-event', roomId: normalizedRoomId, event });
+  }
+}
+
+function handlePartyAction(roomId, payload = {}) {
+  const normalizedRoomId = String(roomId || '').toUpperCase();
+  const room = rooms.get(normalizedRoomId);
+  if (!room) throw new Error('Room not found');
+
+  const action = payload.action;
+  const actorUid = payload.actorUid;
+  const isHost = Boolean(actorUid && room.hostId === actorUid);
+  const fragments = Array.isArray(room.fragments) ? room.fragments : [];
+
+  if (!room.party) {
+    room.party = createInitialPartyState(0, 1);
+  }
+  const party = room.party;
+
+  if (action === 'init-party') {
+    if (!isHost) throw new Error('Only host can initialize Party Showdown.');
+    room.party = createInitialPartyState(0, 1);
+    room.activeLineIndex = 0;
+  } else if (action === 'mark-submitted') {
+    if (party.phase !== 'recording') return room;
+    const activeFrag = fragments[party.fragmentIndex];
+    if (activeFrag && payload.fragId && payload.fragId !== activeFrag.id) return room;
+    const uid = payload.uid || actorUid;
+    if (uid) {
+      if (!Array.isArray(party.submittedUids)) party.submittedUids = [];
+      if (!party.submittedUids.includes(uid)) {
+        party.submittedUids.push(uid);
+      }
+    }
+  } else if (action === 'start-voting') {
+    if (!isHost) throw new Error('Only host can open voting.');
+    if (party.phase !== 'recording') return room;
+    const activeFrag = fragments[party.fragmentIndex];
+    const fragId = activeFrag?.id || payload.fragId;
+    const takeUids = getRoomTakesForFragment(normalizedRoomId, fragId);
+    const mergedCandidates = Array.from(new Set([...(party.submittedUids || []), ...takeUids]));
+    if (mergedCandidates.length === 0) {
+      throw new Error('At least 1 player must record a take before voting starts.');
+    }
+    party.submittedUids = mergedCandidates;
+    party.candidates = mergedCandidates;
+    party.votes = {};
+    party.initialTally = null;
+    party.revoteRound = 0;
+    party.tiedVotesCount = 0;
+    party.lastWinner = null;
+    party.readyUids = [];
+    party.spotlightUid = mergedCandidates[0] || null;
+    party.phase = 'voting';
+    party.statusBanner = `Voting Open! Pick the best dub for Line ${party.fragmentIndex + 1}`;
+  } else if (action === 'cast-vote') {
+    if (party.phase !== 'voting' && party.phase !== 'revote') return room;
+    const voterUid = payload.voterUid || actorUid;
+    const candidateUid = payload.candidateUid;
+    if (!voterUid || !candidateUid) return room;
+    if (!Array.isArray(party.candidates) || !party.candidates.includes(candidateUid)) {
+      throw new Error('Invalid voting candidate.');
+    }
+    if (party.candidates.length > 1 && voterUid === candidateUid) {
+      throw new Error('You cannot vote for your own recording.');
+    }
+    if (!party.votes || typeof party.votes !== 'object') party.votes = {};
+    party.votes[voterUid] = candidateUid;
+
+    const eligibleVoters = getEligibleVoters(room, party.candidates);
+    const allVoted = eligibleVoters.length > 0 && eligibleVoters.every(vId => Boolean(party.votes[vId]));
+    if (allVoted) {
+      resolvePartyVotes(room);
+    }
+  } else if (action === 'close-voting') {
+    if (!isHost) throw new Error('Only host can close voting.');
+    if (party.phase !== 'voting' && party.phase !== 'revote') return room;
+    resolvePartyVotes(room);
+  } else if (action === 'ready-next') {
+    if (party.phase !== 'winner') return room;
+    const uid = payload.uid || actorUid;
+    if (!uid) return room;
+    if (!Array.isArray(party.readyUids)) party.readyUids = [];
+    if (!party.readyUids.includes(uid)) {
+      party.readyUids.push(uid);
+    }
+  } else if (action === 'advance-fragment') {
+    if (!isHost) throw new Error('Only host can advance the game.');
+    if (party.phase !== 'winner') return room;
+    const players = Array.isArray(room.players) ? room.players : [];
+    const readySet = new Set(party.readyUids || []);
+    const allReady = players.every(p => !p?.id || readySet.has(p.id));
+    if (!allReady && !payload.force) {
+      throw new Error('Waiting for all players to click Ready Up.');
+    }
+
+    const total = fragments.length;
+    if (party.fragmentIndex + 1 < total) {
+      party.fragmentIndex += 1;
+      party.phase = 'recording';
+      party.roundSerial = (party.roundSerial || 1) + 1;
+      party.submittedUids = [];
+      party.candidates = [];
+      party.votes = {};
+      party.initialTally = null;
+      party.revoteRound = 0;
+      party.tiedVotesCount = 0;
+      party.lastWinner = null;
+      party.readyUids = [];
+      party.spotlightUid = null;
+      party.statusBanner = `Line ${party.fragmentIndex + 1} of ${total} · Everyone dub this line!`;
+      room.activeLineIndex = party.fragmentIndex;
+    } else {
+      party.phase = 'finale';
+      party.roundSerial = (party.roundSerial || 1) + 1;
+      party.submittedUids = [];
+      party.candidates = [];
+      party.votes = {};
+      party.initialTally = null;
+      party.revoteRound = 0;
+      party.tiedVotesCount = 0;
+      party.lastWinner = null;
+      party.readyUids = [];
+      party.spotlightUid = null;
+      party.finalePlayback = {
+        playing: false,
+        startedAt: 0,
+        position: 0,
+        seq: (party.finalePlayback?.seq || 0) + 1
+      };
+      party.statusBanner = 'Final Premiere Watch Party! Watch your winning group dub together!';
+    }
+  } else if (action === 'redo-fragment') {
+    if (!isHost) throw new Error('Only host can redo a fragment.');
+    const targetIdx = typeof payload.fragmentIndex === 'number'
+      ? Math.max(0, Math.min(Math.max(0, fragments.length - 1), payload.fragmentIndex))
+      : party.fragmentIndex;
+    const targetFrag = fragments[targetIdx];
+    const targetFragId = payload.fragId || targetFrag?.id;
+
+    if (targetFragId) {
+      clearFragmentTakes(normalizedRoomId, targetFragId);
+      if (party.winners && party.winners[targetFragId]) {
+        delete party.winners[targetFragId];
+      }
+    }
+
+    party.fragmentIndex = targetIdx;
+    party.phase = 'recording';
+    party.roundSerial = (party.roundSerial || 1) + 1;
+    party.submittedUids = [];
+    party.candidates = [];
+    party.votes = {};
+    party.initialTally = null;
+    party.revoteRound = 0;
+    party.tiedVotesCount = 0;
+    party.lastWinner = null;
+    party.readyUids = [];
+    party.spotlightUid = null;
+    if (party.finalePlayback) {
+      party.finalePlayback.playing = false;
+      party.finalePlayback.position = 0;
+    }
+    party.statusBanner = `Host triggered a Redo on Line ${targetIdx + 1} — everyone dub again!`;
+    room.activeLineIndex = targetIdx;
+
+    broadcastRoomEvent(normalizedRoomId, {
+      action: 'party-redo',
+      fragmentIndex: targetIdx,
+      fragId: targetFragId,
+      roundSerial: party.roundSerial,
+      playerName: payload.playerName || 'Host',
+      sentAt: Date.now()
+    });
+  } else if (action === 'spotlight-take') {
+    if (!isHost) throw new Error('Only host can spotlight takes for everyone.');
+    party.spotlightUid = payload.candidateUid || null;
+    broadcastRoomEvent(normalizedRoomId, {
+      action: 'party-spotlight',
+      candidateUid: party.spotlightUid,
+      fragmentIndex: party.fragmentIndex,
+      playerName: payload.playerName || 'Host',
+      sentAt: Date.now()
+    });
+  } else if (action === 'finale-control') {
+    if (!isHost) throw new Error('Only host controls Watch Party playback.');
+    const cmd = payload.command || 'play';
+    const prevSeq = party.finalePlayback?.seq || 0;
+    const pos = cmd === 'restart' ? 0 : Math.max(0, Number(payload.position) || 0);
+    party.finalePlayback = {
+      playing: cmd === 'play' || cmd === 'restart',
+      startedAt: Date.now(),
+      position: pos,
+      seq: prevSeq + 1
+    };
+  }
+
+  rooms.set(normalizedRoomId, room);
+  broadcast(`artifacts/loop-booth-mp/public/data/rooms/${normalizedRoomId}`, room);
+  return room;
+}
+
 const httpServer = createServer(async (request, response) => {
   const requestUrl = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
   const videoMatch = requestUrl.pathname.match(/^\/api\/rooms\/([^/]+)\/video$/);
@@ -477,9 +826,11 @@ const wss = new WebSocketServer({ server: httpServer });
 wss.on('connection', socket => {
   subscriptions.set(socket, new Set());
   socket.on('message', raw => {
+    let requestId;
     try {
       const msg = JSON.parse(raw);
-      const { requestId, op, path, data, roomId, event, player } = msg;
+      requestId = msg.requestId;
+      const { op, path, data, roomId, event, player } = msg;
 
       if (op === 'get') return send(socket, { requestId, data: dataFor(path) });
       if (op === 'set') {
@@ -516,7 +867,8 @@ wss.on('connection', socket => {
       }
       if (op === 'player-presence') {
         if (!player || !player.id) return send(socket, { requestId, success: false });
-        const current = rooms.get(roomId) || { id: roomId, players: [] };
+        const normalizedRoomId = String(roomId || '').toUpperCase();
+        const current = rooms.get(normalizedRoomId) || { id: normalizedRoomId, players: [] };
         const existingIndex = (current.players || []).findIndex(p => p && p.id === player.id);
         const updatedPlayers = [...(current.players || [])];
         if (existingIndex >= 0) {
@@ -525,16 +877,21 @@ wss.on('connection', socket => {
           updatedPlayers.push(player);
         }
         const next = { ...current, players: updatedPlayers };
-        rooms.set(roomId, next);
-        broadcast(`artifacts/loop-booth-mp/public/data/rooms/${roomId}`, next);
+        rooms.set(normalizedRoomId, next);
+        broadcast(`artifacts/loop-booth-mp/public/data/rooms/${normalizedRoomId}`, next);
         return send(socket, { requestId, success: true });
+      }
+      if (op === 'party-action') {
+        const targetRoomId = String(roomId || path || '').toUpperCase();
+        const updatedRoom = handlePartyAction(targetRoomId, data || {});
+        return send(socket, { requestId, data: updatedRoom });
       }
       if (op === 'ping') {
         return send(socket, { type: 'pong' });
       }
       send(socket, { requestId, error: 'Unknown operation' });
     } catch (error) {
-      send(socket, { error: error.message });
+      send(socket, { requestId, error: error.message });
     }
   });
   socket.on('close', () => subscriptions.delete(socket));

@@ -10,6 +10,7 @@ let bgCtx = null;
 let asteroids = [];
 let asteroidAnimId = null;
 let isStarted = false;
+let activePlayerColorHexes = [];
 
 function hexToRgb(hex) {
   const clean = (hex || '#B285F5').replace('#', '').trim();
@@ -31,6 +32,67 @@ function getAccentRgb() {
 }
 
 let accentRgb = getAccentRgb();
+
+/**
+ * Assigns target RGB colors across `count` asteroids:
+ * - Each joined non-purple player receives at most 20% (`Math.floor(count * 0.20)`).
+ * - At least 40% always remains the base purple accent color.
+ * - Full 4-player lobby => 40% purple, 20% + 20% + 20% (60% split across the 3 other colors).
+ */
+export function computeAsteroidColorAssignments(count, playerHexColors = [], baseRgb = accentRgb) {
+  const total = Math.max(0, Number(count) || 0);
+  const assignments = new Array(total).fill(null).map(() => ({ ...baseRgb }));
+  if (total === 0 || !Array.isArray(playerHexColors) || playerHexColors.length === 0) {
+    return assignments;
+  }
+
+  const maxPerPlayer = Math.floor(total * 0.20);
+  const maxColoredTotal = Math.floor(total * 0.60);
+  if (maxPerPlayer <= 0 || maxColoredTotal <= 0) {
+    return assignments;
+  }
+
+  const palette = playerHexColors.slice(0, 3).map(hexToRgb);
+  // Modulo-5 slot layout interleaves colored asteroids evenly while reserving slots 0 and 2 (40%) for purple
+  const slotModuloOrder = [1, 3, 4];
+  const countsPerSlot = new Array(palette.length).fill(0);
+  let totalColored = 0;
+
+  for (let i = 0; i < total && totalColored < maxColoredTotal; i++) {
+    const mod = i % 5;
+    const slotIdx = slotModuloOrder.indexOf(mod);
+    if (slotIdx !== -1 && slotIdx < palette.length && countsPerSlot[slotIdx] < maxPerPlayer) {
+      assignments[i] = { ...palette[slotIdx] };
+      countsPerSlot[slotIdx]++;
+      totalColored++;
+    }
+  }
+
+  return assignments;
+}
+
+function applyColorsToExistingAsteroids(snapImmediate = false) {
+  if (!asteroids || asteroids.length === 0) return;
+  const targets = computeAsteroidColorAssignments(asteroids.length, activePlayerColorHexes, accentRgb);
+  asteroids.forEach((a, idx) => {
+    const t = targets[idx] || accentRgb;
+    a.targetRgb = { ...t };
+    if (snapImmediate || !a.rgb) {
+      a.rgb = { ...t };
+    }
+  });
+}
+
+export function setAsteroidPlayerColors(playerHexColors = []) {
+  const cleaned = Array.isArray(playerHexColors)
+    ? playerHexColors.filter((c) => typeof c === 'string' && c.trim().length > 0)
+    : [];
+  const nextKey = cleaned.join(',').toLowerCase();
+  const prevKey = activePlayerColorHexes.join(',').toLowerCase();
+  if (nextKey === prevKey) return;
+  activePlayerColorHexes = cleaned;
+  applyColorsToExistingAsteroids(false);
+}
 
 function makeAsteroidShape(radius) {
   const points = [];
@@ -64,6 +126,8 @@ function makeAsteroid(w, h, reduceMotion) {
     radius,
     shape: makeAsteroidShape(radius),
     opacity: 0.32 + Math.random() * 0.34,
+    rgb: { ...accentRgb },
+    targetRgb: { ...accentRgb },
   };
 }
 
@@ -79,15 +143,20 @@ function resizeBgCanvas() {
 function initAsteroids() {
   const { w, h } = getViewportSize();
   const reduceMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const count = w < 640 ? 9 : 15;
+  const count = w < 640 ? 10 : 15;
   asteroids = [];
   for (let i = 0; i < count; i++) {
     asteroids.push(makeAsteroid(w, h, reduceMotion));
   }
+  applyColorsToExistingAsteroids(true);
 }
 
 function drawAsteroid(a) {
   if (!bgCtx) return;
+  const c = a.rgb || accentRgb;
+  const r = Math.round(c.r);
+  const g = Math.round(c.g);
+  const b = Math.round(c.b);
   bgCtx.save();
   bgCtx.translate(a.x, a.y);
   bgCtx.rotate(a.rotation);
@@ -99,9 +168,9 @@ function drawAsteroid(a) {
     else bgCtx.lineTo(px, py);
   });
   bgCtx.closePath();
-  bgCtx.strokeStyle = `rgba(${accentRgb.r},${accentRgb.g},${accentRgb.b},${a.opacity})`;
+  bgCtx.strokeStyle = `rgba(${r},${g},${b},${a.opacity})`;
   bgCtx.lineWidth = 1.7;
-  bgCtx.shadowColor = `rgba(${accentRgb.r},${accentRgb.g},${accentRgb.b},0.6)`;
+  bgCtx.shadowColor = `rgba(${r},${g},${b},0.6)`;
   bgCtx.shadowBlur = 9;
   bgCtx.stroke();
   bgCtx.restore();
@@ -111,6 +180,12 @@ function updateAsteroid(a, w, h) {
   a.x += a.vx;
   a.y += a.vy;
   a.rotation += a.rotSpeed;
+  if (a.rgb && a.targetRgb) {
+    const ease = 0.06;
+    a.rgb.r += (a.targetRgb.r - a.rgb.r) * ease;
+    a.rgb.g += (a.targetRgb.g - a.rgb.g) * ease;
+    a.rgb.b += (a.targetRgb.b - a.rgb.b) * ease;
+  }
   const pad = a.radius + 20;
   if (a.x < -pad) a.x = w + pad;
   if (a.x > w + pad) a.x = -pad;
@@ -167,6 +242,7 @@ export function startAsteroids() {
   bgCanvas.style.display = 'block';
   bgCanvas.style.opacity = currentMode === 'low' ? '0.5' : '1';
   accentRgb = getAccentRgb();
+  applyColorsToExistingAsteroids(false);
   resizeBgCanvas();
 
   if (!asteroidAnimId) {
@@ -198,14 +274,14 @@ export function stopAsteroids() {
 
 export function initAsteroidsBackground(canvasId = 'bgAsteroids') {
   if (typeof document === 'undefined' || typeof window === 'undefined') {
-    return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode };
+    return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode, setPlayerColors: setAsteroidPlayerColors };
   }
 
   bgCanvas = document.getElementById(canvasId);
-  if (!bgCanvas) return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode };
+  if (!bgCanvas) return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode, setPlayerColors: setAsteroidPlayerColors };
 
   bgCtx = bgCanvas.getContext('2d');
-  if (!bgCtx) return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode };
+  if (!bgCtx) return { start: startAsteroids, stop: stopAsteroids, setMode: setAsteroidsMode, setPlayerColors: setAsteroidPlayerColors };
 
   accentRgb = getAccentRgb();
   resizeBgCanvas();
@@ -230,6 +306,7 @@ export function initAsteroidsBackground(canvasId = 'bgAsteroids') {
   return {
     start: startAsteroids,
     stop: stopAsteroids,
-    setMode: setAsteroidsMode
+    setMode: setAsteroidsMode,
+    setPlayerColors: setAsteroidPlayerColors
   };
 }
